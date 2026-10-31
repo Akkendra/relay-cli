@@ -25,7 +25,6 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
 header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 20px; }
 h1 { font-size: 22px; margin: 0; font-weight: 650; }
 h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
-.sub { color: var(--ink-2); }
 .muted { color: var(--muted); }
 .spacer { flex: 1; }
 button { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
@@ -35,8 +34,6 @@ button[aria-pressed="true"] { background: var(--wash); font-weight: 600; }
 .grid { display: grid; gap: 12px; margin-bottom: 12px; }
 .limits { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-.two { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
-@media (max-width: 820px) { .two { grid-template-columns: 1fr; } }
 .label { color: var(--ink-2); font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .value { font-size: 26px; font-weight: 600; margin-top: 2px; }
 .note { color: var(--muted); font-size: 12px; margin-top: 4px; }
@@ -126,17 +123,10 @@ html.hud.hud { --hue: 255; --page: oklch(0.15 0.02 var(--hue)); --surface: oklch
 .hud button[aria-pressed="true"] { background: var(--wash); color: var(--ink); border-color: rgba(255, 255, 255, 0.16); }
 .hud .meter { height: 6px; border-radius: 3px; margin: 12px 0 8px; background: var(--codex-track); }
 .hud .meter.claude { background: var(--claude-track); }
-.tagline { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.pill { font-size: 12px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
-.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
-.pill.off::before { background: var(--critical); }
 .clock { display: grid; justify-items: end; line-height: 1.1; }
 .clock span { font-size: 22px; font-weight: 400; color: var(--ink); }
 .clock small { font-size: 14px; color: var(--muted); }
 .clock em { font-style: normal; font-size: 12px; color: var(--muted); }
-.hero { display: grid; grid-template-columns: minmax(200px, 0.8fr) minmax(0, 2.4fr); gap: 14px; margin-bottom: 14px; align-items: stretch; }
-.hero .limits { margin-bottom: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 820px) { .hero { grid-template-columns: 1fr; } .hero .limits { grid-template-columns: 1fr; } }
 .value small { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
 .skills summary { cursor: pointer; color: var(--ink-2); }
 .skills ul { margin: 6px 0 0; padding-left: 16px; columns: 2 180px; font-size: 12px; color: var(--muted); }
@@ -148,7 +138,6 @@ html.hud.hud { --hue: 255; --page: oklch(0.15 0.02 var(--hue)); --surface: oklch
 .sections a { color: var(--ink-2); text-decoration: none; font-size: 14px; padding: 6px 12px; border-radius: 999px; }
 .sections a:hover { color: var(--ink); background: var(--wash); }
 .tools { justify-self: end; display: flex; align-items: center; gap: 16px; }
-.tools .pill { border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; }
 .tools .clock { display: flex; align-items: baseline; gap: 8px; }
 .tools .clock span { font-size: 15px; } .tools .clock em { margin: 0; }
 .icon { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; border-radius: 999px; font-size: 15px; }

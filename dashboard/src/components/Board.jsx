@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 
 const ROW = 4, GAP = 14;
-import { SIZES, mergeLayout, moveTo } from '../format.js';
+import { SIZES, moveTo } from '../format.js';
 
 // Tiles that can be dragged into place, nudged with arrows, and sized S / M / L while editing.
 export function Board({ layout, setLayout, editing, widgets }) {

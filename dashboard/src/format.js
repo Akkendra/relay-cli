@@ -74,11 +74,12 @@ export function limitLevel(pct) { return pct >= 90 ? 'critical' : pct >= 70 ? 'w
 // Dashboard layout: S / M / L tiles in saved order.
 export const SIZES = [['s', 'S', 'Small'], ['m', 'M', 'Medium'], ['l', 'L', 'Large']];
 
-// Saved layout plus any widgets added since it was saved; unknown ids are dropped.
+// Saved layout plus any widgets added since it was saved, each at its default position; unknown ids are dropped.
 export function mergeLayout(saved, defaults) {
   const known = new Map(defaults.map(w => [w.id, w]));
-  const kept = (Array.isArray(saved) ? saved : []).filter(w => known.has(w?.id)).map(w => ({ id: w.id, size: SIZES.some(([s]) => s === w.size) ? w.size : known.get(w.id).size }));
-  return [...kept, ...defaults.filter(w => !kept.some(k => k.id === w.id))];
+  const out = (Array.isArray(saved) ? saved : []).filter(w => known.has(w?.id)).map(w => ({ id: w.id, size: SIZES.some(([s]) => s === w.size) ? w.size : known.get(w.id).size }));
+  defaults.forEach((w, i) => { if (!out.some(k => k.id === w.id)) out.splice(i, 0, w); });
+  return out;
 }
 export function moveTo(layout, from, to) {
   if (from === to || from < 0 || to < 0 || to >= layout.length) return layout;
