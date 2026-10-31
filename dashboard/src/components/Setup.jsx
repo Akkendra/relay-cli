@@ -8,11 +8,16 @@ function contents(p) {
   return parts.join(' · ') || '—';
 }
 
+function Skills({ names, label }) {
+  if (!names?.length) return null;
+  return <details className="skills"><summary>{label ?? n(names.length, 'skill')}</summary><ul>{names.map(s => <li key={s}>{s}</li>)}</ul></details>;
+}
+
 function Agent({ provider, c }) {
   const rows = provider === 'claude'
-    ? [['Skills (yours)', c.skills], ['Agents', c.agents], ['Hooks', c.hooks.join(', ') || '—'], ['MCP servers', c.mcpServers.join(', ') || '—'],
+    ? [['Skills (yours)', <Skills names={c.skillNames} />], ['Agents', c.agents], ['Hooks', c.hooks.join(', ') || '—'], ['MCP servers', c.mcpServers.join(', ') || '—'],
        ['Status line', c.statusLine ? 'on' : 'off'], ['Memory', `${c.memory.globalInstructions ? 'CLAUDE.md · ' : ''}${n(c.memory.projectMemories, 'project note')}`]]
-    : [['Skills', c.skills], ['MCP servers', c.mcpServers.join(', ') || '—'], ['Memory', [c.memory.globalInstructions && 'AGENTS.md', c.memory.memories && 'memories on'].filter(Boolean).join(' · ') || '—']];
+    : [['Skills', <Skills names={c.skillNames} />], ['MCP servers', c.mcpServers.join(', ') || '—'], ['Memory', [c.memory.globalInstructions && 'AGENTS.md', c.memory.memories && 'memories on'].filter(Boolean).join(' · ') || '—']];
   return (
     <div className="card">
       <h2><Dot provider={provider} /> {providerName(provider)} setup</h2>
@@ -21,7 +26,7 @@ function Agent({ provider, c }) {
       <div className="table-wrap"><table><tbody>
         {c.plugins.map(p => (
           <tr key={p.name}><td>{p.enabled ? <span className="status good">On</span> : <span className="status idle muted">Off</span>}</td>
-            <td>{p.name}{p.version ? <span className="muted"> {p.version}</span> : null}</td><td className="muted wrap">{provider === 'claude' ? contents(p) : ''}</td></tr>
+            <td>{p.name}{p.version ? <span className="muted"> {p.version}</span> : null}</td><td className="muted wrap">{provider === 'claude' ? <>{contents(p)}<Skills names={p.skillNames} label="show skills" /></> : ''}</td></tr>
         ))}
       </tbody></table></div>
     </div>

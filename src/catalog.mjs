@@ -11,6 +11,18 @@ function countFiles(dir, test, depth = 4) {
   return list(dir).reduce((n, e) => n + (e.isDirectory() ? countFiles(join(dir, e.name), test, depth - 1) : test(e.name) ? 1 : 0), 0);
 }
 const hookEvents = hooks => Object.keys(hooks ?? {});
+// Skill names: the frontmatter name, or the folder holding SKILL.md.
+function skillNames(dir, depth = 4) {
+  if (depth < 0) return [];
+  return list(dir).flatMap(e => {
+    const path = join(dir, e.name);
+    if (!e.isDirectory()) return [];
+    if (!existsSync(join(path, 'SKILL.md'))) return skillNames(path, depth - 1);
+    let name = e.name;
+    try { name = readFileSync(join(path, 'SKILL.md'), 'utf8').match(/^name:\s*["']?([^"'\n]+)/m)?.[1].trim() || e.name; } catch {}
+    return [name, ...skillNames(path, depth - 1)];
+  }).sort((a, b) => a.localeCompare(b));
+}
 
 function pluginContents(dir) {
   const manifest = json(join(dir, '.claude-plugin', 'plugin.json')) ?? {};
@@ -19,6 +31,7 @@ function pluginContents(dir) {
     ...hookFiles.flatMap(f => hookEvents(json(join(dir, f))?.hooks)), ...hookEvents(typeof manifest.hooks === 'object' && !Array.isArray(manifest.hooks) ? manifest.hooks : null)]);
   return {
     skills: countFiles(join(dir, 'skills'), n => n === 'SKILL.md'),
+    skillNames: skillNames(join(dir, 'skills')),
     commands: countFiles(join(dir, 'commands'), n => /\.(md|toml)$/.test(n), 1),
     agents: countFiles(join(dir, 'agents'), n => n.endsWith('.md'), 1),
     hooks: [...hooks],
@@ -37,6 +50,7 @@ function claudeCatalog(home) {
   return {
     plugins,
     skills: countFiles(join(dir, 'skills'), n => n === 'SKILL.md'),
+    skillNames: skillNames(join(dir, 'skills')),
     agents: countFiles(join(dir, 'agents'), n => n.endsWith('.md'), 1),
     hooks: hookEvents(settings.hooks),
     mcpServers: [...mcp].sort(),
@@ -57,6 +71,7 @@ function codexCatalog(home) {
     plugins: unique(named('plugins.')),
     mcpServers: unique(named('mcp_servers.')).map(m => m.name).sort(),
     skills: countFiles(join(dir, 'skills'), n => n === 'SKILL.md'),
+    skillNames: skillNames(join(dir, 'skills')),
     memory: { globalInstructions: existsSync(join(dir, 'AGENTS.md')), memories: existsSync(join(dir, 'memories_1.sqlite')) },
   };
 }

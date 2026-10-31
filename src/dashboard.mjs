@@ -52,6 +52,12 @@ export function startDashboard({ port = 4318, home = homedir(), configDir = rela
       res.writeHead(200, { ...headers, 'Content-Type': 'application/json' }).end(body);
       return;
     }
+    // The landing page (site/index.html) carries its own inline styles, so it gets its own policy.
+    if (path === '/welcome') {
+      res.writeHead(200, { ...headers, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; base-uri 'none'" })
+        .end(readFileSync(new URL('../site/index.html', import.meta.url)));
+      return;
+    }
     const asset = staticFile(distDir, path);
     if (asset) {
       const cache = asset.immutable ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {};

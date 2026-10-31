@@ -41,7 +41,7 @@ nav a { text-decoration: none; } nav a:hover { color: var(--ink); }
 .plane.near { background: oklch(0.165 0.025 var(--hue)); height: 22vh; border-radius: 0; }
 @keyframes rise { from { opacity: 0; transform: translateY(0.4em); } }
 
-section { padding: 120px 0; }
+section, section.wrap { padding-top: 96px; padding-bottom: 96px; }
 .kicker { font: 600 13px/1 var(--mono); color: var(--accent); letter-spacing: 0.06em; margin: 0 0 16px; }
 h2 { font-size: clamp(2rem, 4.4vw, 3.2rem); line-height: 1.05; letter-spacing: -0.035em; margin: 0 0 20px; max-width: 18ch; }
 .lede { color: var(--ink-2); max-width: 58ch; margin: 0; }
@@ -88,9 +88,10 @@ h2 { font-size: clamp(2rem, 4.4vw, 3.2rem); line-height: 1.05; letter-spacing: -
 
 pre { background: oklch(0.12 0.02 var(--hue)); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; font: 14px/1.8 var(--mono); overflow-x: auto; margin: 40px 0 0; }
 pre .c { color: var(--muted); }
-footer { padding: 48px 0 64px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+footer, footer.wrap { padding-top: 40px; padding-bottom: 64px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
 
 @media (max-width: 860px) {
+  section, section.wrap { padding-top: 80px; padding-bottom: 80px; }
   .play { height: auto; } .play .stick { position: static; grid-template-columns: 1fr; padding: 96px 0; }
   .row { grid-template-columns: 1fr; gap: 8px; } .meters { grid-template-columns: 1fr; }
   .term p, .steps li { animation: none !important; opacity: 1 !important; transform: none !important; }

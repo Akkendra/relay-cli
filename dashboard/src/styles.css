@@ -143,3 +143,5 @@ html.hud.hud { --hue: 255; --page: oklch(0.15 0.02 var(--hue)); --surface: oklch
 .core-label b { font-size: 13px; font-weight: 600; color: var(--ink); }
 .core-label span { font-size: 12px; color: var(--muted); }
 .value small { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
+.skills summary { cursor: pointer; color: var(--ink-2); }
+.skills ul { margin: 6px 0 0; padding-left: 16px; columns: 2 180px; font-size: 12px; color: var(--muted); }

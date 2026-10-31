@@ -14,7 +14,7 @@ import { usePersisted, useSummary } from './hooks.js';
 
 const SERIES = ['codex', 'claude'];
 const RANGES = [{ value: '7', label: '7d' }, { value: '14', label: '14d' }, { value: '30', label: '30d' }];
-const NEXT_THEME = { auto: 'light', light: 'dark', dark: 'auto' };
+const NEXT_THEME = { dark: 'light', light: 'dark' };
 
 // Only shown when some log lines or files couldn't be read.
 function Footer({ sources }) {
@@ -29,16 +29,14 @@ export function App() {
   const [metric, setMetric] = usePersisted('metric', 'nocache');
   const [range, setRange] = usePersisted('range', '14');
   const [provider, setProvider] = usePersisted('provider', 'all');
-  const [theme, setTheme] = usePersisted('theme', 'auto');
+  const [stored, setTheme] = usePersisted('theme', 'dark');
+  // The command-center look is the default; light only when chosen (an old 'auto' preference counts as dark).
+  const theme = stored === 'light' ? 'light' : 'dark';
   const [showTable, setShowTable] = useState(false);
 
   useEffect(() => {
-    const root = document.documentElement, media = matchMedia('(prefers-color-scheme: dark)');
-    if (theme === 'auto') delete root.dataset.theme; else root.dataset.theme = theme;
-    // The command-center look is the dark theme.
-    const apply = () => root.classList.toggle('hud', theme === 'dark' || (theme === 'auto' && media.matches));
-    apply(); media.addEventListener('change', apply);
-    return () => media.removeEventListener('change', apply);
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.classList.toggle('hud', theme === 'dark');
   }, [theme]);
 
   const now = data ? Date.now() : 0;
@@ -52,7 +50,7 @@ export function App() {
         <span className="sub">{data ? `updated ${ago(data.generatedAt)}` : ''}</span>
         <span className="spacer" />
         <Clock />
-        <button type="button" title="Switch theme" onClick={() => setTheme(NEXT_THEME[theme] ?? 'auto')}>Theme: {theme}</button>
+        <button type="button" title="Switch theme" onClick={() => setTheme(NEXT_THEME[theme])}>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
       </header>
       {error && <div className="banner" role="alert">Can’t reach the dashboard server ({error}). Is relay dashboard still running?</div>}
       {data && (

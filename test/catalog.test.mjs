@@ -19,7 +19,7 @@ test('the catalog lists plugins, skills, hooks, and MCP server names without any
   w('.claude/skills/mine/SKILL.md', 'x'); w('.claude/projects/p/memory/note.md', 'x'); w('.claude/projects/p/memory/MEMORY.md', 'x');
   w('.codex/config.toml', '[plugins."docs@openai"]\nenabled = true\n\n[plugins."old@openai"]\nenabled = false\n\n[mcp_servers.figma]\ncommand = "x"\n[mcp_servers.figma.env]\nKEY = "nope"\n');
   const c = readCatalog({ home });
-  assert.deepEqual(c.claude.plugins, [{ name: 'tidy@market', enabled: true, version: '1.2.0', skills: 2, commands: 1, agents: 0, hooks: ['SessionStart'], mcpServers: [] }]);
+  assert.deepEqual(c.claude.plugins, [{ name: 'tidy@market', enabled: true, version: '1.2.0', skills: 2, skillNames: ['a', 'b'], commands: 1, agents: 0, hooks: ['SessionStart'], mcpServers: [] }]);
   assert.deepEqual([c.claude.skills, c.claude.hooks, c.claude.mcpServers, c.claude.statusLine, c.claude.memory.projectMemories], [1, ['Stop'], ['github'], true, 1]);
   assert.deepEqual(c.codex.plugins, [{ name: 'docs@openai', enabled: true }, { name: 'old@openai', enabled: false }]);
   assert.deepEqual(c.codex.mcpServers, ['figma']);
