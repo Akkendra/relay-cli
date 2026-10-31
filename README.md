@@ -43,7 +43,7 @@ relay> Create formatDuration(minutes). Acceptance: 0 -> '0m', 65 -> '1h 5m'; rej
 
 | Command | What it does |
 |---|---|
-| `relay` | Opens the interactive prompt. Each line you type is a task; `/help` lists `/status`, `/diff`, `/undo`, `/history`, `/models`, `/ask`, `/task`, `/interactive <task>`, and `/quit`. Up-arrow recalls earlier lines and Tab completes commands. |
+| `relay` | Opens the interactive prompt. Each line you type is a task; `/help` lists `/status`, `/diff`, `/review`, `/undo`, `/history`, `/models`, `/continue`, `/resume`, `/run`, `/ask`, `/task`, `/interactive <task>`, `/verbose`, and `/quit`. Up-arrow recalls earlier lines and Tab completes commands. |
 | `relay doctor` | Shows the Node, git, `codex`, and `claude` versions. It doesn't check sign-in. |
 | `relay init` | Creates `.relay/` in the current git repo and excludes it locally through `.git/info/exclude`. |
 | `relay task "<goal and acceptance criteria>"` | Records a task. Its baseline is a snapshot of the current files, so the tree needn't be clean; the earlier task moves to history. |
@@ -59,12 +59,12 @@ relay> Create formatDuration(minutes). Acceptance: 0 -> '0m', 65 -> '1h 5m'; rej
 2. **Build.** Codex runs non-interactively (`codex exec`) and finishes on its own, streaming the commands it runs, the files it edits, and its messages. It stays in the workspace-write sandbox with no network, and with `approval_policy="never"` anything outside the sandbox is refused, never auto-approved. Use `/interactive <task>` or `relay build` when you want Codex's own window and approval prompts.
 3. **Tests, with consent.** Before Relay first runs project code (`npm test`, or the app's dev/start script), it asks once per run. The default is no.
 4. **Review.** Claude reviews the task's diff, the Node version, and bounded test output. It can read and search the project and use your Claude skills, but it can't run commands, edit files, use MCP connectors, or read `.env*`, `*.pem`, `*.key` or `.relay/`. The packet records the SHA-256 of the tested diff, which Relay has verified matches the reviewed one.
-5. **Fix loop.** Findings and failing tests go back to the **same Codex session** automatically, one tier bigger each round, then Relay tests and reviews again. It stops when Claude replies `NO_FINDINGS`, or after 5 fix rounds (status `needs_human_decision`). Follow-up reviews get only the changes since the last review, plus its findings.
+5. **Fix loop.** Findings and failing tests go back to the **same Codex session** automatically, one tier bigger each round, then Relay tests and reviews again. It stops when Claude replies `NO_FINDINGS` (bold or as a heading also counts), when a fix round leaves the code unchanged (Codex judged the findings wrong; its reply is shown), or after 5 fix rounds. The last two end as `needs_human_decision`. If a run stops early, `/resume` (or `relay review`) picks it up without a new build. Follow-up reviews get only the changes since the last review, plus its findings.
 6. **Run the app.** After a clean review, Relay starts the `dev` or `start` script in the background (log in `.relay/app.log`) and opens the URL it prints, or opens `index.html` for a static site. `/run` starts it again.
 
 **Follow-ups.** While the current task has changes, a new line at the prompt asks `[Enter] follow up on the current task · [n] new task`. Follow-ups continue the same Codex session; `/continue <text>` does the same without asking.
 
-**Large tasks and skills.** Codex is told to use its installed skills and plugins. On the large tier (and for any build from a PDF), it acts as a lead agent: it plans, splits the work across Codex subagents, settles their questions and conflicts, and integrates the result.
+**Large tasks and skills.** Codex is told to use its installed skills and plugins. On the large tier (and for any build from a PDF file), it acts as a lead agent: it plans, splits the work across Codex subagents, settles their questions and conflicts, and integrates the result.
 
 **Baselines.** Each task's starting point is a snapshot of the folder: a git tree written through a temporary index. Nothing is committed and your index isn't touched. Tasks run back to back in one folder, and each is reviewed on its own changes only.
 
@@ -80,7 +80,7 @@ Relay sizes each task so small work goes to cheaper models and complex work to b
 | medium | `gpt-6.1-sol`, medium effort | `sonnet`, medium effort |
 | large | `gpt-6-astra`, high effort | `opus`, medium effort (its default) |
 
-- **Build tier, before Codex starts.** Relay scores the task locally, for free, from its length, the number of acceptance criteria, signal words ("refactor", "security" vs "typo", "docs"), and repo size. A build from a PDF is always large. Only borderline scores get a second opinion from Claude Haiku, which costs about 1–2K tokens and runs with no tools. You see the plan and press Enter to run it, `b` or `s` to go one tier bigger or smaller, or `q` to cancel.
+- **Build tier, before Codex starts.** Relay scores the task locally, for free, from its length, the number of acceptance criteria, signal words ("refactor", "security" vs "typo", "docs"), and repo size. An ask with a `.pdf` file in it is always large. Saying "the pdf" attaches the folder's PDF when there is exactly one; just mentioning PDFs ("download as PDF") doesn't change the tier. Only borderline scores get a second opinion from Claude Haiku, which costs about 1–2K tokens and runs with no tools. You see the plan and press Enter to run it, `b` or `s` to go one tier bigger or smaller, or `q` to cancel.
 - **Review tier, after the build,** based on what actually changed: up to 60 lines in at most 3 files is small, over 600 lines or 15 files is large. Changes to auth, payments, secrets, workflows, `package.json`, or `.env*` always get the large reviewer.
 - **Limits are respected.** Before each build and review, Relay reads the live limits (Codex from its app server, Claude from `relay statusline`). At 80% of either window the provider is capped at medium, and at 90% at small. The plan shows the reason, and you can still bump the build up with `b`.
 - **Usage is recorded.** Each task saves its tiers, which model chose them (rules, classifier, or you), and the build's tokens, read from Codex's session log. The dashboard shows them on the task's card.
@@ -137,8 +137,8 @@ It prints a short line, such as `Opus 5.5 · 42% session · 17% week`. It saves 
 ## Safety model
 
 - **Codex** keeps its own sandbox and approval prompts. Relay asks it not to commit, push, or deploy; that's an instruction, not something Git enforces.
-- **Claude reviews read-only.** It runs as `claude --strict-mcp-config --mcp-config '{"mcpServers":{}}' --tools Read,Grep,Glob,Skill --disallowedTools 'mcp__*' 'Read(**/.env*)' … -p --output-format json`: skills and file reading, but no shell, no edits, no connectors and no credential files. Unsupported flags make it fail rather than quietly loosen the restrictions.
-- **Your git index is never touched.** Untracked, non-ignored files enter the diff through a temporary copy of the index. Ignored files, such as `.env`, stay out. Diffs over 100 KB are rejected, never truncated.
+- **Claude reviews read-only.** It runs as `claude --strict-mcp-config --mcp-config '{"mcpServers":{}}' --tools Read,Grep,Glob,Skill --allowedTools Skill --disallowedTools 'mcp__*' 'Read(**/.env*)' … -p --output-format json`: skills and file reading inside the project only, with no shell, no edits, no connectors and no credential files. Only `Skill` is pre-allowed, because a bare `Read` rule would allow reads anywhere on the machine. Diffs over 100 KB aren't inlined: the reviewer gets the changed-file list and reads the files itself, while the secret scan and hash still cover the whole diff. Unsupported flags make it fail rather than quietly loosen the restrictions.
+- **Your git index is never touched.** Untracked, non-ignored files enter the diff through a temporary copy of the index. Ignored files, such as `.env`, stay out. Diffs are never truncated; over 100 KB the reviewer reads the changed files itself.
 - **Only one Relay operation runs at a time**, enforced by `.relay/lock`. After a crash, check that no provider process is still running before you delete it.
 - **The dashboard server:**
   - binds to `127.0.0.1` and answers only `localhost`, `127.0.0.1`, so a malicious page can't reach it through DNS rebinding;
