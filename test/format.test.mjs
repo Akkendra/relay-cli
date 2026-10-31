@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fmt, metricValue, metricName, ago, until, windowName, niceMax, topRounded, statusLevel, statusText, limitLevel } from '../dashboard/src/format.js';
+import { fmt, metricValue, metricName, ago, until, windowName, niceMax, topRounded, statusLevel, statusText, limitLevel, duration, matches, groupSessions } from '../dashboard/src/format.js';
 
 test('token counts are compacted for display', () => {
   assert.deepEqual([0, 999, 1234, 12345, 7568776, 2.5e9].map(fmt), ['0', '999', '1.2K', '12K', '7.6M', '2.5B']);
@@ -44,4 +44,12 @@ test('sessions of the same agent and project fold into one summary row', async (
 test('project names are the last folder of the path', async () => {
   const { projectName } = await import('../dashboard/src/format.js');
   assert.deepEqual(['~/Desktop/relay-demo', '/private/tmp/x/', '~', null].map(projectName), ['relay-demo', 'x', '~', '—']);
+});
+test('durations, session search, and grouped prompt and time', () => {
+  assert.deepEqual([0, 42, 90, 3600, 5400].map(duration), ['0s', '42s', '2m', '1h 0m', '1h 30m']);
+  const s = { provider: 'codex', project: '~/Desktop/Layers', models: ['gpt-6-luna'], prompt: 'Build the Listen stage', tokens: {}, activeSec: 60 };
+  assert.ok(matches(s, 'listen') && matches(s, 'layers') && matches(s, 'LUNA') && matches(s, ''));
+  assert.ok(!matches(s, 'invoice'));
+  const [g] = groupSessions([{ ...s, prompt: null, lastAt: '2' }, { ...s, lastAt: '1' }]);
+  assert.equal(g.activeSec, 120); assert.equal(g.prompt, 'Build the Listen stage');
 });

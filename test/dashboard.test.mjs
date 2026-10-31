@@ -40,7 +40,8 @@ function fakeHome(t) {
   const assistant = (id, model, at, u) => ({ type: 'assistant', timestamp: at, sessionId: 'claude-1', cwd: project, message: { id, model, usage: u, content: [{ type: 'text', text: 'SECRET-ANSWER' }] } });
   const u = { input_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 50, output_tokens: 20, output_tokens_details: { thinking_tokens: 4 } };
   writeFileSync(join(claudeDir, 'claude-1.jsonl'), jsonl([
-    { type: 'user', timestamp: '2026-10-30T12:01:00Z', sessionId: 'claude-1', cwd: project, message: { content: 'SECRET-PROMPT' } },
+    { type: 'user', timestamp: '2026-10-30T12:01:00Z', sessionId: 'claude-1', cwd: project, message: { content: 'Add a   feature\nplease' } },
+    { type: 'user', timestamp: '2026-10-30T12:01:05Z', sessionId: 'claude-1', cwd: project, message: { content: 'SECRET-LATER-PROMPT' } },
     assistant('m1', 'claude-test', '2026-10-30T12:01:05Z', u),
     assistant('m1', 'claude-test', '2026-10-30T12:01:06Z', u),
     assistant('m2', 'claude-test', '2026-10-30T12:01:09Z', { ...u, output_tokens: 40 }),
@@ -76,7 +77,9 @@ test('usage summary splits Codex cached input, dedupes Claude messages, and neve
   assert.equal(today.codex.total, 275); assert.equal(today.claude.total, 370);
   assert.equal(s.hourly.length, 12); assert.deepEqual([s.hourly.at(-1).codex, s.hourly.at(-1).claude], [275, 370], 'this hour holds the session tokens');
   assert.deepEqual(s.models.map(m => [m.provider, m.model, m.tokens.total]), [['claude', 'claude-test', 370], ['codex', 'gpt-test', 275]]);
-  assert.doesNotMatch(JSON.stringify(s), /SECRET/);
+  assert.doesNotMatch(JSON.stringify(s), /SECRET/, 'only the first prompt line leaves the parser');
+  assert.equal(claude.prompt, 'Add a feature please'); assert.equal(codex.prompt, null, 'non-user messages are not prompts');
+  assert.equal(claude.activeSec, 10); assert.deepEqual(s.projects, [{ path: '~/proj', sessions: 2 }]);
   assert.ok(!JSON.stringify(s).includes(home), 'paths under home are shortened to ~');
 });
 test('Relay projects are discovered from session folders with review usage and the review session marked', t => {
@@ -87,6 +90,22 @@ test('Relay projects are discovered from session folders with review usage and t
   assert.equal(task.review.model, 'claude-test'); assert.equal(task.review.tokens.total, 62); assert.equal(task.review.costUSD, 0.05);
   assert.equal(task.sessions.find(s => s.provider === 'claude').isReview, true);
   assert.equal(task.sessions.find(s => s.provider === 'codex').isReview, false);
+});
+test('the first prompt skips injected context and hides credentials', async () => {
+  const { promptLine } = await import('../src/usage.mjs');
+  assert.equal(promptLine('<command-name>/x</command-name>'), null);
+  assert.equal(promptLine([{ type: 'input_text', text: '# AGENTS.md instructions' }]), null);
+  assert.equal(promptLine([{ type: 'tool_result', content: 'x' }]), null);
+  assert.equal(promptLine([{ type: 'input_text', text: 'Implement this bounded task' }]), 'Implement this bounded task');
+  assert.equal(promptLine('use key AKIA' + 'Q'.repeat(16)), '(hidden: looks like a credential)');
+  assert.equal(promptLine('x'.repeat(300)).length, 100);
+});
+test('a project filter limits sessions and charts to that folder but keeps the project list and limits', t => {
+  const { home } = fakeHome(t);
+  const other = summarize({ home, now, project: '~/elsewhere' });
+  assert.equal(other.sessions.length, 0); assert.equal(other.daily.at(-1).codex.total, 0); assert.equal(other.runs.length, 0);
+  assert.deepEqual(other.projects, [{ path: '~/proj', sessions: 2 }]); assert.equal(other.limits.codex.primary.usedPercent, 20);
+  assert.equal(summarize({ home, now, project: '~/proj' }).sessions.length, 2);
 });
 test('missing log folders produce an empty summary instead of an error', t => {
   const home = tempDir(t, 'relay-empty-');
