@@ -31,7 +31,7 @@ test('Relay and limit statuses map to labelled levels', () => {
 test('saved layouts keep their order and sizes, add new tiles, and drop unknown ones', async () => {
   const { mergeLayout, moveTo } = await import('../dashboard/src/format.js');
   const defaults = [{ id: 'a', size: 's' }, { id: 'b', size: 'l' }, { id: 'c', size: 'm' }];
-  assert.deepEqual(mergeLayout([{ id: 'c', size: 'l' }, { id: 'x', size: 's' }, { id: 'a', size: 'huge' }], defaults), [{ id: 'c', size: 'l' }, { id: 'a', size: 's' }, { id: 'b', size: 'l' }]);
+  assert.deepEqual(mergeLayout([{ id: 'c', size: 'l' }, { id: 'x', size: 's' }, { id: 'a', size: 'huge' }], defaults), [{ id: 'c', size: 'l' }, { id: 'b', size: 'l' }, { id: 'a', size: 's' }], 'b was added later, so it goes back to its default slot');
   assert.deepEqual(mergeLayout('garbage', defaults), defaults);
   assert.deepEqual(moveTo(defaults, 0, 2).map(w => w.id), ['b', 'c', 'a']); assert.equal(moveTo(defaults, 0, 5), defaults);
 });

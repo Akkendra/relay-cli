@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 
 const ROW = 4, GAP = 14;
-import { SIZES, mergeLayout, moveTo } from '../format.js';
+import { SIZES, moveTo } from '../format.js';
 
 // Tiles that can be dragged into place, nudged with arrows, and sized S / M / L while editing.
 export function Board({ layout, setLayout, editing, widgets }) {
@@ -12,7 +12,7 @@ export function Board({ layout, setLayout, editing, widgets }) {
   useLayoutEffect(() => {
     const measure = () => {
       const next = {};
-      for (const el of ref.current?.querySelectorAll(':scope > .widget') ?? []) next[el.id] = Math.ceil((el.firstElementChild.getBoundingClientRect().height + (el.children[1]?.getBoundingClientRect().height ?? 0) + GAP) / ROW);
+      for (const el of ref.current?.querySelectorAll(':scope > .widget') ?? []) next[el.id] = Math.ceil(([...el.children].reduce((h, c) => h + c.getBoundingClientRect().height, 0) + GAP) / ROW);
       setSpans(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     };
     let frame;
