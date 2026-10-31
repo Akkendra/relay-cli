@@ -73,7 +73,7 @@ Relay sizes each task so small work goes to cheaper models and complex work to b
 |---|---|---|
 | small | `gpt-6-luna`, low effort | `haiku`, low effort |
 | medium | `gpt-6.1-sol`, medium effort | `sonnet`, medium effort |
-| large | `gpt-6-astra`, high effort | `opus`, high effort |
+| large | `gpt-6-astra`, high effort | `opus`, medium effort (its default) |
 
 - **Build tier, before Codex starts.** Relay scores the task locally, for free, from its length, the number of acceptance criteria, signal words ("refactor", "security" vs "typo", "docs"), and repo size. Only borderline scores get a second opinion from Claude Haiku, which costs about 1–2K tokens and runs with no tools. You see the plan and press Enter to run it, `b` or `s` to go one tier bigger or smaller, or `q` to cancel.
 - **Review tier, after the build,** based on what actually changed: up to 60 lines in at most 3 files is small, over 600 lines or 15 files is large. Changes to auth, payments, secrets, workflows, `package.json`, or `.env*` always get the large reviewer.

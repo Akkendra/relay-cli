@@ -17,7 +17,8 @@ export const DEFAULT_MODELS = {
   claude: {
     small: { model: 'haiku', effort: 'low' },
     medium: { model: 'sonnet', effort: 'medium' },
-    large: { model: 'opus', effort: 'high' },
+    // Opus 5.5 defaults to medium effort; higher spends more without being the documented default.
+    large: { model: 'opus', effort: 'medium' },
   },
   classifier: { model: 'haiku', effort: 'low' },
 };
