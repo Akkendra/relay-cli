@@ -32,6 +32,13 @@ test('statusline saves only the plan-limit windows and prints a short line', asy
   const limits = summarize({ home, now }).limits.claude;
   assert.equal(limits.primary.usedPercent, 42.6); assert.equal(limits.secondary.usedPercent, 17);
 });
+test('a report with only the 5-hour window keeps the saved weekly window', async t => {
+  const { home, file } = await run(t, JSON.stringify(input));
+  const partial = { ...input, rate_limits: { five_hour: { used_percentage: 50, resets_at: 1793427600 } } };
+  await runStatusline({ stdin: Readable.from([JSON.stringify(partial)]), env: { HOME: home }, now, out: { write() {} } });
+  const saved = JSON.parse(readFileSync(file, 'utf8'));
+  assert.equal(saved.primary.usedPercent, 50); assert.equal(saved.secondary.usedPercent, 17);
+});
 test('without rate limits (API users, first response) nothing is saved and context is shown', async t => {
   const { printed, file } = await run(t, JSON.stringify({ model: { display_name: 'Sonnet 5.5' }, context_window: { used_percentage: 40.2 } }));
   assert.equal(printed, 'Sonnet 5.5 · 40% context'); assert.ok(!existsSync(file));
