@@ -131,8 +131,6 @@ Changes go through branches and pull requests, with CI on every pull request. Se
 
 React and Vite are pinned dev dependencies used only for the build. `dist/` is gitignored, so rebuild after cloning.
 
-The a proxy project project was a reference for ideas only. Its approach (an `ANTHROPIC_BASE_URL` override that rewrites requests) conflicts with Relay's environment checks, and that repository states no license, so no code was copied.
-
 ## Limitations
 
 - One task per project. No automatic repairs, no token forecasting, no provider-session resumption.
