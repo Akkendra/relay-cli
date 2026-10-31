@@ -180,7 +180,7 @@ tr.detail td { white-space: normal; background: var(--wash); }
 .stages { display: inline-flex; gap: 3px; } .stages i { width: 18px; height: 6px; border-radius: 2px; background: var(--border); }
 .stages i.done { background: var(--good); } .stages i.failed { background: var(--critical); }
 /* Editable board: a 12-column grid; S = 4, M = 8, L = 12 columns. */
-.board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 14px; grid-auto-rows: 4px; grid-auto-flow: row dense; align-items: start; }
 .widget { min-width: 0; position: relative; }
 .widget.w-s { grid-column: span 4; } .widget.w-m { grid-column: span 8; } .widget.w-l { grid-column: span 12; }
 .widget > *, .widget > section, .widget .grid, .widget .card { margin-bottom: 0; }
@@ -218,3 +218,10 @@ tr.detail td { white-space: normal; background: var(--wash); }
 .working li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; font-size: 12px; }
 .working li b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .working li span { color: var(--muted); }
 .agents .foot { margin-top: auto; }
+.board.editing .widget { outline-offset: 2px; }
+/* Latest run tile */
+.latest { display: flex; flex-direction: column; gap: 10px; }
+.latest-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .latest-head h2 { margin: 0; }
+.latest .goal { margin: 0; -webkit-line-clamp: 2; line-clamp: 2; }
+.latest .meta { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+.latest .meta b { font: 500 14px/1 ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink); }

@@ -11,7 +11,7 @@ function stages(r) {
   const decision = ['needs_human_decision', 'done'].includes(r.status) ? 'done' : build === 'failed' || test === 'failed' || review === 'failed' ? 'failed' : 'skipped';
   return [['Build', build], ['Test', test], ['Review', review], ['Decision', decision]];
 }
-function Stages({ run }) {
+export function Stages({ run }) {
   return <span className="stages" role="img" aria-label={stages(run).map(([n, s]) => `${n} ${s}`).join(', ')}>{stages(run).map(([n, s]) => <i key={n} className={s} title={`${n}: ${s}`} />)}</span>;
 }
 const tests = t => !t ? '—' : !t.ran ? `not run (${t.reason})` : t.exitCode === 0 ? 'passed' : `failed (exit ${t.exitCode})`;

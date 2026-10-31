@@ -140,3 +140,12 @@ footer { border-top: 1px solid var(--line); margin-top: var(--s6); }
   .statement, .rows { padding-bottom: var(--s3); }
   .play .stick, .install { padding-block: var(--s3); }
 }
+/* Laptops: the pinned section is only as tall as its content, and Install runs straight into the footer. */
+@media (min-width: 901px) {
+  .play .stick { min-height: 0; padding-block: var(--s6); }
+  .statement { padding-bottom: var(--s6); }
+  .install { padding-bottom: var(--s5); }
+  footer { margin-top: 0; }
+}
+.statement { align-items: start; }
+@media (min-width: 901px) { .statement { padding-top: var(--s6); } }
