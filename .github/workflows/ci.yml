@@ -39,4 +39,5 @@ jobs:
       # Providers are fake executables in the tests; no Codex or Claude tokens are spent.
       - run: npm test
       - run: npm run build:dashboard
+      - run: npm run build:site
       - run: npm audit --audit-level=high

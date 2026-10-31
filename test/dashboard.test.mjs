@@ -137,3 +137,13 @@ test('an unbuilt dashboard explains how to build it while the API keeps working'
   assert.equal(page.status, 503); assert.match(page.body, /npm run build:dashboard/);
   assert.equal((await rawGet(port, '/api/summary')).status, 200);
 });
+test('the landing page is served at /welcome with its assets, under the strict policy', async t => {
+  const { home } = fakeHome(t);
+  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), readAccount: async () => null, distDir: fakeDist(t), siteDir: fakeDist(t) });
+  t.after(() => server.close());
+  const { port } = server.address();
+  const page = await rawGet(port, '/welcome');
+  assert.equal(page.status, 200); assert.match(page.body, /Relay Usage/); assert.match(page.headers['content-security-policy'], /script-src 'self'; style-src 'self'/);
+  assert.equal((await rawGet(port, '/welcome/assets/app-abc123.js')).status, 200);
+  assert.equal((await rawGet(port, '/welcome/assets/%2e%2e/secret.txt')).status, 404);
+});

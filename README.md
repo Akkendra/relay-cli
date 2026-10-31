@@ -142,6 +142,7 @@ test/                    node:test suites (fake providers, fake logs, no tokens 
 npm test                  # all suites; providers are fake executables on PATH
 npm run build:dashboard   # build dashboard/ into dist/dashboard (picked up without restarting)
 npm run dev:dashboard     # live reload at http://127.0.0.1:5173, proxying /api to a running dashboard
+npm run build:site        # landing page (React, GSAP + ScrollTrigger, Lenis, Inter) → served at /welcome
 ```
 
 Changes go through branches and pull requests, with CI on every pull request. See [CONTRIBUTING.md](CONTRIBUTING.md).

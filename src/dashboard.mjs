@@ -10,6 +10,7 @@ import { readCatalog } from './catalog.mjs';
 
 // The React page is built with `npm run build:dashboard`; files are read per request so a rebuild needs no restart.
 const defaultDistDir = fileURLToPath(new URL('../dist/dashboard/', import.meta.url));
+const defaultSiteDir = fileURLToPath(new URL('../dist/site/', import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.json': 'application/json' };
 const headers = {
@@ -31,7 +32,7 @@ function staticFile(distDir, pathname) {
 
 // Read-only and bound to loopback. The Host check stops other web pages from reading the API through DNS rebinding;
 // allowHosts adds explicitly named hosts, such as a Tailscale Serve name that proxies to this loopback port.
-export function startDashboard({ port = 4318, home = homedir(), configDir = relayConfigDir(), now = () => new Date(), allowHosts = [], distDir = defaultDistDir,
+export function startDashboard({ port = 4318, home = homedir(), configDir = relayConfigDir(), now = () => new Date(), allowHosts = [], distDir = defaultDistDir, siteDir = defaultSiteDir,
   readAccount = threadIds => readCodexAccount({ threadIds }) } = {}) {
   let codexIds = [];
   const account = accountCache({ read: () => readAccount(codexIds) });
@@ -52,13 +53,9 @@ export function startDashboard({ port = 4318, home = homedir(), configDir = rela
       res.writeHead(200, { ...headers, 'Content-Type': 'application/json' }).end(body);
       return;
     }
-    // The landing page (site/index.html) carries its own inline styles, so it gets its own policy.
-    if (path === '/welcome') {
-      res.writeHead(200, { ...headers, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; base-uri 'none'" })
-        .end(readFileSync(new URL('../site/index.html', import.meta.url)));
-      return;
-    }
-    const asset = staticFile(distDir, path);
+    // The landing page (npm run build:site) is served at /welcome under the same strict policy.
+    const site = path === '/welcome' || path === '/welcome/' ? staticFile(siteDir, '/') : path.startsWith('/welcome/assets/') ? staticFile(siteDir, path.slice(8)) : null;
+    const asset = site ?? staticFile(distDir, path);
     if (asset) {
       const cache = asset.immutable ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {};
       res.writeHead(200, { ...headers, ...cache, 'Content-Type': types[extname(asset.file)] ?? 'application/octet-stream' }).end(readFileSync(asset.file));
