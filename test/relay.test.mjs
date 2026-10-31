@@ -374,3 +374,22 @@ test('near a plan limit, the build and review are capped at cheaper tiers, with 
   assert.equal(task.routing.build.tier, 'medium'); assert.ok(task.routing.build.reasons.some(r => /Codex is at 85% of its 5-hour limit, so capped at medium/.test(r)));
   assert.equal(task.routing.review.model, 'haiku');
 });
+test('fix rounds get a follow-up review of only the new changes, with the earlier findings', async t => {
+  const h = runHarness(t, { choices: ['', 'f', ''] });
+  await h.run();
+  const packet = h.read('claude-input.txt');
+  assert.match(packet, /FOLLOW-UP REVIEW[\s\S]*EARLIER FINDINGS\nFindings: one possible bug\./);
+  assert.match(packet, /feature-2\.js/); assert.doesNotMatch(packet, /b\/src\/feature\.js/, 'the already-reviewed file is not sent again');
+  assert.equal(h.state().reviewHash, h.state().run.tests.diffHash, 'safety checks still cover the whole task');
+});
+test('/continue sends a follow-up to the same Codex session without a new task', async t => {
+  const h = runHarness(t);
+  const lines = ['add a banner', '/continue make it blue', '/quit'];
+  const original = console.log; console.log = () => {};
+  try { await main([], h.root, { ...h.deps, readLine: async () => lines.shift() ?? null }); }
+  finally { console.log = original; }
+  const args = JSON.parse(h.read('codex-2.json'));
+  assert.deepEqual(args.slice(0, 2), ['exec', 'resume']); assert.equal(args.at(-2), 'thread-fake');
+  assert.match(h.read('codex-prompt-2.txt'), /Follow-up from the user: make it blue/);
+  assert.equal(h.saved().task.goal, 'add a banner'); assert.equal(h.saved().history.length, 1);
+});

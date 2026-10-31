@@ -16,6 +16,7 @@ and you can ask for fixes until you're done. Nothing is committed or pushed.
   /undo                put the current task's changes back (asks first)
   /history             earlier tasks in this folder
   /models              which models each tier uses (~/.config/relay/models.json)
+  /continue <text>     follow up on the current task in the same Codex session
   /ask <question>      answer a question read-only (also automatic for lines ending in ? or starting with where/what/why/how…)
   /task <text>         run the line as a task even if it reads like a question
   /interactive <task>  run a task in Codex's own window, with its approval prompts
@@ -44,7 +45,7 @@ async function findProject(cwd, deps) {
   return projectRoot(cwd);
 }
 
-const COMMANDS = ['/ask', '/diff', '/help', '/history', '/interactive', '/models', '/quit', '/status', '/task', '/undo'];
+const COMMANDS = ['/ask', '/continue', '/diff', '/help', '/history', '/interactive', '/models', '/quit', '/status', '/task', '/undo'];
 export const complete = line => [line.startsWith('/') ? COMMANDS.filter(c => c.startsWith(line)) : [], line];
 // Up-arrow history, kept per project in .relay (which git ignores).
 function promptHistory(root) {
@@ -104,6 +105,11 @@ export async function repl(cwd, deps) {
       } else if (command === '/interactive') {
         if (!rest.length) console.log('Usage: /interactive <task>');
         else await runTask(root, rest.join(' '), deps, 'interactive');
+      } else if (command === '/continue') {
+        const t = readState(root).task;
+        if (!rest.length) console.log('Usage: /continue <what to change>');
+        else if (!t?.routing?.build) console.log('No task to continue yet. Type a task first.');
+        else { requireSubscriptionEnvironment(deps.env); await locked(root, () => runAll(root, readState(root), deps, { followUp: rest.join(' ') })); }
       } else if (command === '/ask' || command === '/task') {
         if (!rest.length) console.log(`Usage: ${command} <text>`);
         else if (command === '/ask') await ask(root, rest.join(' '), deps);

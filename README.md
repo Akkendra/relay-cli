@@ -59,7 +59,7 @@ relay> Create formatDuration(minutes). Acceptance: 0 -> '0m', 65 -> '1h 5m'; rej
 2. **Build.** Codex runs non-interactively (`codex exec`) and finishes on its own, streaming the commands it runs, the files it edits, and its messages. It stays in the workspace-write sandbox with no network, and with `approval_policy="never"` anything outside the sandbox is refused, never auto-approved. Use `/interactive <task>` or `relay build` when you want Codex's own window and approval prompts.
 3. **Tests, with consent.** If `package.json` has a `test` script, Relay asks `Run "npm test"? [y/N]` every time. The default is no.
 4. **Review.** Claude, with no tools, reviews the task's diff, the Node version, and bounded test output. The packet records the SHA-256 of the tested diff, which Relay has verified matches the reviewed one.
-5. **Fix, without leaving.** Type `f` to send the review findings (or failing test output) back to the **same Codex session**, or type your own instructions. Relay then tests and reviews again, as often as you like. Press Enter when you're done.
+5. **Fix, without leaving.** Type `f` to send the review findings (or failing test output) back to the **same Codex session**, or type your own instructions. Relay then tests and reviews again, as often as you like. Follow-up reviews get only the changes since the last review, plus its findings. Press Enter when you're done. Later, `/continue <text>` picks the task up again in the same Codex session.
 
 **Baselines.** Each task's starting point is a snapshot of the folder: a git tree written through a temporary index. Nothing is committed and your index isn't touched. Tasks run back to back in one folder, and each is reviewed on its own changes only.
 
