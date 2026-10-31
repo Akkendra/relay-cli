@@ -128,9 +128,11 @@ function importedContext(root, changed, task) {
 }
 // Code quotes in backticks that don't appear in the diff (changed or context lines) mark findings Relay can't verify.
 // Every span is matched so short ones keep the backticks paired; bare names and file paths aren't quotes.
+// A quote shortened with ... or … is found when its parts appear in order on one line.
+const found = (line, quote) => { let at = 0; return quote.split(/\.\.\.|…/).map(p => p.trim()).filter(Boolean).every(p => (at = line.indexOf(p, at)) >= 0 && (at += p.length)); };
 export function unverifiedQuotes(review, diff) {
   const lines = diff.split('\n').filter(l => /^[+\- ]/.test(l)).map(l => l.slice(1));
-  return [...review.matchAll(/`([^`\n]+)`/g)].map(m => m[1].trim()).filter(q => q.length >= 8 && !/^[\w-]+$/.test(q) && !/[\/.]\w+$/.test(q) && !lines.some(l => l.includes(q)));
+  return [...review.matchAll(/`([^`\n]+)`/g)].map(m => m[1].trim()).filter(q => q.length >= 8 && !/^[\w-]+$/.test(q) && !/[\/.]\w+$/.test(q) && !lines.some(l => found(l, q)));
 }
 // Likely credentials in added lines. Anything that matches stops Relay from sending the text to a provider.
 const SECRETS = [/AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /\bgh[pousr]_[A-Za-z0-9]{30,}/, /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/,
