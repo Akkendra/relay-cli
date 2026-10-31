@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { answer, answerQuestion, createTask, initialize, projectRoot, readState, locked, runAll, requireSubscriptionEnvironment, taskChanges, undoTask } from './relay.mjs';
+import { answer, answerQuestion, attachedLine, createTask, prepareAsk, initialize, projectRoot, readState, locked, runAll, requireSubscriptionEnvironment, taskChanges, undoTask } from './relay.mjs';
 import { loadModels } from './routing.mjs';
 
 // `relay` with no arguments: a prompt where each line is a task. Codex runs inside it, then tests (with consent),
@@ -110,7 +110,7 @@ export async function repl(cwd, deps) {
         const t = readState(root).task;
         if (!rest.length) console.log('Usage: /continue <what to change>');
         else if (!t?.routing?.build) console.log('No task to continue yet. Type a task first.');
-        else { requireSubscriptionEnvironment(deps.env); await locked(root, () => runAll(root, readState(root), deps, { followUp: rest.join(' ') })); }
+        else { requireSubscriptionEnvironment(deps.env); const a = intake(root, rest.join(' ')); await locked(root, () => runAll(root, readState(root), deps, { followUp: a.text, images: a.images })); }
       } else if (command === '/ask' || command === '/task') {
         if (!rest.length) console.log(`Usage: ${command} <text>`);
         else if (command === '/ask') await ask(root, rest.join(' '), deps);
@@ -127,12 +127,16 @@ export async function repl(cwd, deps) {
 export const isQuestion = text => /\?\s*$/.test(text) || /^(where|what|why|how|which|who|when|explain|is there|are there|does|do i|can i)\b/i.test(text);
 async function ask(root, question, deps) {
   requireSubscriptionEnvironment(deps.env);
-  await locked(root, () => answerQuestion(root, question, deps));
+  const a = intake(root, question);
+  await locked(root, () => answerQuestion(root, a.text, deps, a.images));
 }
+// Word limit and attachments for anything typed at the prompt.
+function intake(root, text) { const a = prepareAsk(root, text); if (attachedLine(a)) console.log(attachedLine(a)); return a; }
 async function runTask(root, goal, deps, mode) {
   requireSubscriptionEnvironment(deps.env);
+  const a = intake(root, goal);
   await locked(root, async () => {
-    createTask(root, goal);
+    createTask(root, a.text, a.images);
     await runAll(root, readState(root), deps, { mode });
   });
 }

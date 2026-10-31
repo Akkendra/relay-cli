@@ -447,3 +447,21 @@ test('flagged actions are recorded without stopping the run, and show in the run
   const [run] = summarize({ home: h.home }).runs;
   assert.equal(run.status, 'needs_human_decision'); assert.equal(run.flags.length, 1); assert.ok(run.trace.length > 0); assert.ok(run.build.model);
 });
+test('asks are capped at 2500 words and attach text files and images by path', async t => {
+  const { prepareAsk, execArgs } = await import('../src/relay.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'relay-ask-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.throws(() => prepareAsk(root, 'word '.repeat(2501)), /2501 words; the limit is 2500/);
+  assert.equal(prepareAsk(root, 'word '.repeat(2500)).text.length, 'word '.repeat(2500).length);
+  mkdirSync(join(root, 'My Notes'));
+  writeFileSync(join(root, 'My Notes', 'spec.md'), 'Promo SCOOP10 applies once.');
+  writeFileSync(join(root, 'shot.png'), 'png');
+  writeFileSync(join(root, 'creds.txt'), 'api_key = "abcdefghijklmnop"');
+  const a = prepareAsk(root, 'Build it per @My\\ Notes/spec.md and match ./shot.png.');
+  assert.deepEqual(a.files, ['My Notes/spec.md']);
+  assert.deepEqual(a.images, [join(root, 'shot.png')], 'trailing punctuation is ignored');
+  assert.match(a.text, /ATTACHED FILE My Notes\/spec\.md\nPromo SCOOP10 applies once\./);
+  assert.deepEqual(prepareAsk(root, 'add/remove items, see src/missing.js').files, [], 'words with slashes that are not files stay text');
+  assert.throws(() => prepareAsk(root, '@creds.txt'), /looks like it holds a credential/);
+  assert.deepEqual(execArgs({ model: 'm', effort: 'low' }, { images: ['/a.png'] }).slice(0, 4), ['exec', '--image', '/a.png', '--json']);
+});

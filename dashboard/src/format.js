@@ -23,6 +23,8 @@ export function metricValue(t, metric) {
 }
 export const metricName = metric => (METRICS.find(m => m.value === metric) ?? METRICS[0]).name;
 export const providerName = p => p === 'codex' ? 'Codex' : 'Claude';
+// Last folder of a project path (~/Desktop/relay-demo → relay-demo); the full path stays in the title.
+export const projectName = p => (p ?? '').replace(/\/+$/, '').split('/').pop() || p || '—';
 
 export function ago(iso, now = Date.now()) {
   if (!iso) return '—';
@@ -57,7 +59,7 @@ export function topRounded(x, y, w, h, r) {
 }
 
 const STATUS = {
-  needs_human_decision: ['good', 'Reviewed · needs your decision'],
+  needs_human_decision: ['good', 'Reviewed · keep, change or undo'],
   tests_failed: ['critical', 'Tests failed'],
   review_failed: ['critical', 'Review failed'],
   interrupted: ['warning', 'Build interrupted'],

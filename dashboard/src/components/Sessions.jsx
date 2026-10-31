@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { Dot, Seg } from './Seg.jsx';
-import { KEYS, ago, fmt, groupSessions, providerName } from '../format.js';
+import { KEYS, ago, fmt, groupSessions, projectName, providerName } from '../format.js';
 
 const PAGE_SIZE = 10;
 const PROVIDERS = [{ value: 'all', label: 'All' }, { value: 'codex', label: 'Codex' }, { value: 'claude', label: 'Claude' }];
@@ -9,7 +9,7 @@ function Row({ s, now, count, open, onToggle, child }) {
     <tr className={`${count > 1 ? 'clickable' : ''}${child ? ' child' : ''}`} onClick={onToggle} aria-expanded={count > 1 ? open : undefined}>
       <td>{s.live ? <span className="status good live">Live</span> : <span className="status idle muted">Idle</span>}</td>
       <td><span className="label plain"><Dot provider={s.provider} />{providerName(s.provider)}</span></td>
-      <td className="project" title={s.project ?? ''}>{child ? <span className="muted">↳ session</span> : <>{s.project ?? '—'}{s.relayProject && <span className="muted"> · Relay</span>}</>}</td>
+      <td className="project" title={s.project ?? ''}>{child ? <span className="muted">↳ session</span> : <>{projectName(s.project)}{s.relayProject && <span className="muted"> · Relay</span>}</>}</td>
       <td>{count > 1 ? <span className="count">{count} sessions {open ? '▾' : '▸'}</span> : (s.models.join(', ') || '—')}</td>
       <td title={s.lastAt ?? ''}>{ago(s.lastAt, now)}</td>
       {KEYS.map(k => <td key={k} className="n">{k === 'total' ? <b>{fmt(s.tokens[k])}</b> : fmt(s.tokens[k])}</td>)}
