@@ -64,6 +64,7 @@ test('provider arguments preserve approval path and remove reviewer tools', () =
   assert.equal(args[args.indexOf('--sandbox') + 1], 'workspace-write');
   const review = reviewArgs(); assert.equal(review[review.indexOf('--tools') + 1], REVIEW_TOOLS); assert.ok(!REVIEW_TOOLS.match(/Bash|Edit|Write/));
   assert.ok(review.includes('Read(**/.env*)'), 'credential files stay unreadable');
+  assert.equal(review[review.indexOf('--allowedTools') + 1], 'Skill', 'a bare Read allow rule would open files outside the project');
   assert.equal(review[review.indexOf('--disallowedTools') + 1], 'mcp__*');
 });
 
@@ -84,7 +85,7 @@ if (args[0] === 'exec') {
   if (process.env.FAKE_CODEX_CMD) { out({ type: 'item.started', item: { type: 'command_execution', command: process.env.FAKE_CODEX_CMD } }); fs.writeFileSync(log('codex-waiting'), '1'); require('child_process').execSync('sleep 5'); fs.writeFileSync(log('codex-finished'), '1'); }
   if (process.env.FAKE_CODEX_LOCK) fs.writeFileSync('package-lock.json', JSON.stringify({ packages: { x: 'y'.repeat(150000) } }));
   if (process.env.FAKE_CODEX_SECRET) fs.writeFileSync('config.js', 'export const key = ' + JSON.stringify(process.env.FAKE_CODEX_SECRET) + ';\\n');
-  if (!process.env.FAKE_CODEX_NOOP) fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
+  if (!process.env.FAKE_CODEX_NOOP && !(n > Number(process.env.FAKE_CODEX_NOOP_AFTER || Infinity))) fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
   out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: file, kind: 'add' }] } });
   out({ type: 'item.completed', item: { type: 'agent_message', text: 'Implemented ' + file }});
   out({ type: 'turn.completed', usage: { input_tokens: 900, cached_input_tokens: 600, output_tokens: 40 } });
@@ -269,7 +270,7 @@ test('the build plan can be bumped up before Codex starts, and borderline tasks 
   assert.equal(h.plans.length, 2, 'the plan twice: before and after the change');
 });
 test('a PDF build is large: Codex leads subagents and is told to use its skills', async t => {
-  const h = runHarness(t, { goal: 'check the pdf here and build me that app' });
+  const h = runHarness(t, { goal: 'build me the app in brief.pdf' });
   await h.run();
   assert.equal(h.state().routing.build.tier, 'large');
   assert.match(h.read('codex-prompt-1.txt'), /act as the lead agent[\s\S]*spawn one subagent per part[\s\S]*Use your installed skills and plugins/);
@@ -312,6 +313,34 @@ test('the fix loop stops after the last round with findings still open, escalati
   assert.ok(!h.logged(`codex-${MAX_FIX_ROUNDS + 2}.json`));
   assert.equal(h.state().status, 'needs_human_decision'); assert.equal(h.prompts.length, 1);
   assert.ok(!h.logged('open.json'), 'the app only starts after a clean review');
+});
+test('a fix round that changes nothing stops the loop instead of repeating the same review', async t => {
+  const h = runHarness(t, { env: { FAKE_CLAUDE_FINDINGS: '99', FAKE_CODEX_NOOP_AFTER: '1' } });
+  await h.run();
+  assert.ok(h.logged('codex-2.json') && !h.logged('codex-3.json'), 'one fix round, then stop');
+  assert.equal(h.read('review-count'), '1', 'no second review of unchanged code');
+  assert.equal(h.state().status, 'needs_human_decision');
+});
+test('the clean marker counts when formatted, and only at the start', async () => {
+  const { isClean } = await import('../src/relay.mjs');
+  for (const r of ['NO_FINDINGS', '**NO_FINDINGS**\nAll good.', '## NO_FINDINGS', '`NO_FINDINGS`']) assert.ok(isClean(r), r);
+  for (const r of ['Findings: 1. bug\nNO_FINDINGS', 'NO_FINDINGSX', '']) assert.ok(!isClean(r), r);
+});
+test('/resume in a folder with no task says so instead of crashing', async t => {
+  const { root } = fixture(t);
+  const logs = [], lines = ['/resume', '/quit'];
+  const original = console.log; console.log = (...a) => logs.push(a.join(' '));
+  try { await main([], root, { isTTY: true, env: { HOME: root }, confirm: async () => true, readLine: async () => lines.shift() ?? null }); }
+  finally { console.log = original; }
+  assert.ok(logs.some(l => l.includes('has not been built yet')), logs.join('\n'));
+});
+test('starting the app leaves a saved pid alone when it is no longer npm', async t => {
+  const h = runHarness(t, { packageJson: { scripts: { dev: 'vite' } } });
+  const other = (await import('node:child_process')).spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+  t.after(() => { try { process.kill(-other.pid); } catch {} });
+  writeFileSync(join(h.root, '.relay', 'app.pid'), String(other.pid));
+  await h.run();
+  assert.doesNotThrow(() => process.kill(other.pid, 0), 'the unrelated process is still running');
 });
 test('a clean review starts the dev script and opens its URL; a static site opens index.html', async t => {
   const h = runHarness(t, { packageJson: { scripts: { test: 'node --test', dev: 'vite' } } });
@@ -518,6 +547,9 @@ test('asks are capped at 2500 words and attach text files and images by path', a
   assert.deepEqual(prepareAsk(root, 'add/remove items, see src/missing.js').files, [], 'words with slashes that are not files stay text');
   assert.throws(() => prepareAsk(root, '@creds.txt'), /looks like it holds a credential/);
   writeFileSync(join(root, 'brief.pdf'), '%PDF-1.7\0binary');
+  assert.deepEqual(prepareAsk(root, 'check the pdf here and build that app').files, ['brief.pdf'], 'the one PDF in the folder is the one meant');
+  writeFileSync(join(root, 'other.pdf'), '%PDF');
+  assert.deepEqual(prepareAsk(root, 'check the pdf here').files, [], 'with two PDFs, none is guessed');
   assert.match(prepareAsk(root, 'build the app in ./brief.pdf').text, /ATTACHED FILE \.\/brief\.pdf\n\(PDF: read it from disk\.\)/, 'PDFs are referenced, not inlined');
   assert.deepEqual(execArgs({ model: 'm', effort: 'low' }, { images: ['/a.png'] }).slice(0, 4), ['exec', '--image', '/a.png', '--json']);
 });

@@ -1,5 +1,5 @@
 import { spawnSync, spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, renameSync, openSync, closeSync, unlinkSync, existsSync, copyFileSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, renameSync, openSync, closeSync, unlinkSync, existsSync, copyFileSync, rmSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
@@ -93,6 +93,11 @@ export function prepareAsk(root, text) {
     if (SECRETS.some(re => re.test(body))) throw new Error(`${name} looks like it holds a credential, so it wasn't attached.`);
     if (!files.some(f => f.name === name)) files.push({ name, body });
   }
+  // "check the pdf here": with exactly one PDF in the folder, that's the one meant.
+  if (/\bpdfs?\b/i.test(text) && !files.some(f => /\.pdf$/i.test(f.name))) {
+    const pdfs = readdirSync(root).filter(f => /\.pdf$/i.test(f));
+    if (pdfs.length === 1) files.push({ name: pdfs[0], body: '(PDF: read it from disk.)' });
+  }
   return { text: text + files.map(f => `\n\nATTACHED FILE ${f.name}\n${f.body}`).join(''), images, files: files.map(f => f.name) };
 }
 export const attachedLine = a => (a.files.length || a.images.length) ? `Attached: ${[...a.files, ...a.images].join(', ')}` : '';
@@ -185,7 +190,8 @@ export function findSecrets(diff) {
   return [...new Set(hits)];
 }
 const CLEAN = 'NO_FINDINGS';
-export const isClean = review => review.trim().startsWith(CLEAN);
+// Models sometimes format the marker as bold or a heading.
+export const isClean = review => /^[\s*#_`]*NO_FINDINGS\b/.test(review);
 function sha256(text) { return createHash('sha256').update(text).digest('hex'); }
 function diffHash(root, task) { return sha256(reviewDiff(root, task).diff); }
 // Follow-up rounds send only the changes since the last review plus its findings; the hash still covers the whole task.
@@ -284,10 +290,12 @@ export async function answerQuestion(root, question, deps, images = []) {
   console.log(`(${tokenLine(run.tokens)})`);
 }
 // The reviewer gets skills and read-only file tools: no shell, no edits, no MCP connectors, and no credential files.
+// Only Skill is pre-allowed: a bare "Read" allow rule would open every file on the machine, while reads inside
+// the project need no rule and reads outside it are refused in -p mode.
 export const REVIEW_TOOLS = 'Read,Grep,Glob,Skill';
 export function reviewArgs(choice) {
   const model = choice ? ['--model', choice.model, '--effort', choice.effort] : [];
-  return ['--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--tools', REVIEW_TOOLS, '--allowedTools', REVIEW_TOOLS,
+  return ['--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--tools', REVIEW_TOOLS, '--allowedTools', 'Skill',
     '--disallowedTools', 'mcp__*', 'Read(**/.env*)', 'Read(**/*.pem)', 'Read(**/*.key)', 'Read(./.relay/**)', '-p', '--output-format', 'json', ...model];
 }
 function startError(command, e) {
@@ -623,10 +631,10 @@ export function consentOnce(confirm) {
 // resume: skip the build and start at tests and review on the current changes (relay review, /resume).
 export async function runAll(root, state, deps, { mode = 'exec', followUp, images, resume } = {}) {
   const task = state.task;
-  if ((followUp || resume) && !task.routing?.build) throw new Error('This task has not been built yet. Type a task, or use relay run.');
+  if ((followUp || resume) && !task?.routing?.build) throw new Error('This task has not been built yet. Type a task, or use relay run.');
   const policy = loadPolicy(deps.env);
   deps = { ...deps, policy, allowCode: deps.allowCode ?? consentOnce(deps.confirm) };
-  let round = 0;
+  let round = 0, last = null;
   task.run = { id: randomUUID(), startedAt: new Date().toISOString(), steps: [], tests: null, trace: [], flags: [], policyHash: policy.hash };
   checkpoint(root, state, 'started');
   try {
@@ -639,6 +647,13 @@ export async function runAll(root, state, deps, { mode = 'exec', followUp, image
         break;
       }
       const builtHash = diffHash(root, task);
+      // Codex left the code as it was (it judged the findings wrong, or is stuck): another round would repeat the same review.
+      if (last?.hash === builtHash) {
+        console.log(`Codex changed nothing in fix round ${round}. Its reply:\n${short(task.lastCodexMessage, 600)}`);
+        if (last.kind === 'tests') throw failure(`npm test still fails and Codex changed nothing (${last.why}). Failure saved to .relay/test-failure.json; the task is not complete.`, 'tests_failed');
+        task.status = 'needs_human_decision';
+        break;
+      }
       checkpoint(root, state, 'built', { diffHash: builtHash });
       console.log(`Codex finished · ${tokenLine(task.routing.build.tokens)} so far (not yet verified).`);
       const next = await verify(root, state, deps, builtHash);
@@ -653,6 +668,7 @@ export async function runAll(root, state, deps, { mode = 'exec', followUp, image
       const choice = { tier, ...models.codex[tier] };
       console.log(`Fix round ${round}/${MAX_FIX_ROUNDS}: Codex ${describe(choice)} fixes the ${next.kind === 'tests' ? 'failing tests' : 'review findings'}.`);
       checkpoint(root, state, 'fix_requested', { kind: next.kind, round, model: choice.model });
+      last = { hash: builtHash, kind: next.kind, why: next.why };
       await stage('fix', () => runFix(root, state, deps, next, choice));
     }
   } catch (e) {
@@ -681,7 +697,11 @@ export async function launchApp(root, deps) {
   }
   if (!await deps.allowCode(root)) return console.log(`App not started; /run starts it (npm run ${script}).`);
   const pidFile = join(root, '.relay', 'app.pid'), logFile = join(root, '.relay', 'app.log');
-  try { process.kill(-Number(readFileSync(pidFile, 'utf8')), 'SIGTERM'); } catch {}
+  // Only stop the earlier app if that pid is still an npm process: after a reboot the number can belong to anything.
+  try {
+    const old = Number(readFileSync(pidFile, 'utf8'));
+    if (old > 0 && /\bnpm\b/.test(spawnSync('ps', ['-o', 'command=', '-p', String(old)], { encoding: 'utf8' }).stdout ?? '')) process.kill(-old, 'SIGTERM');
+  } catch {}
   const log = openSync(logFile, 'w');
   const child = detach('npm', ['run', script], { cwd: root, env: deps.env, stdio: ['ignore', log, log] });
   closeSync(log);
