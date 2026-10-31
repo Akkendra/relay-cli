@@ -77,7 +77,7 @@ if (args[0] === 'exec') {
   const out = e => process.stdout.write(JSON.stringify(e) + '\\n');
   out({ type: 'thread.started', thread_id: args[1] === 'resume' ? args.at(-2) : 'thread-fake' });
   out({ type: 'item.started', item: { type: 'command_execution', command: 'npm test' } });
-  fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
+  if (!process.env.FAKE_CODEX_NOOP) fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
   out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: file, kind: 'add' }] } });
   out({ type: 'item.completed', item: { type: 'agent_message', text: 'Implemented ' + file }});
   out({ type: 'turn.completed', usage: { input_tokens: 900, cached_input_tokens: 600, output_tokens: 40 } });
@@ -309,3 +309,21 @@ test('the prompt offers to set up local git in a plain folder, and leaves it alo
   } finally { console.log = original; }
   assert.ok(existsSync(join(dir, '.git')) && existsSync(join(dir, '.relay', 'state.json')));
 });
+test('questions are answered read-only, and a build with no changes skips tests and review', async t => {
+  const h = runHarness(t);
+  const lines = ['where is the site hosted', '/task Add feature; test it', '/quit'];
+  const original = console.log; console.log = () => {};
+  try { await main([], h.root, { ...h.deps, readLine: async () => lines.shift() ?? null, env: { ...h.deps.env, FAKE_CODEX_NOOP: '1' } }); }
+  finally { console.log = original; }
+  const ask = JSON.parse(h.read('codex-1.json'));
+  assert.equal(ask[ask.indexOf('--sandbox') + 1], 'read-only'); assert.equal(ask[ask.indexOf('-m') + 1], 'gpt-6-luna');
+  assert.match(h.read('codex-prompt-1.txt'), /Do not modify anything[\s\S]*where is the site hosted/);
+  assert.equal(h.prompts.length, 0, 'no test prompt'); assert.ok(!h.logged('claude.json'), 'no review');
+  assert.equal(h.state().status, 'no_changes'); assert.equal(h.saved().history.length, 1, 'only /task created a task');
+});
+for (const [text, question] of [['where is the site hosted', true], ['How do I run it?', true], ['add a banner', false], ['Fix the typo in the footer', false]]) {
+  test(`"${text}" is ${question ? 'a question' : 'a task'}`, async () => {
+    const { isQuestion } = await import('../src/cli.mjs');
+    assert.equal(isQuestion(text), question);
+  });
+}

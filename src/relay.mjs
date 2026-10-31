@@ -126,11 +126,18 @@ export function buildArgs(task, choice = DEFAULT_MODELS.codex.medium) {
 }
 // Non-interactive Codex, which finishes on its own. It stays in the workspace-write sandbox and can never escalate:
 // with approval_policy "never", anything outside the sandbox is refused rather than auto-approved.
-export function execArgs(choice, { resume } = {}) {
+export function execArgs(choice, { resume, sandbox = 'workspace-write' } = {}) {
   const common = ['--json', '-m', choice.model, '-c', `model_reasoning_effort="${choice.effort}"`, '-c', 'approval_policy="never"'];
   return resume
-    ? ['exec', 'resume', ...common, '-c', 'sandbox_mode="workspace-write"', resume, '-']
-    : ['exec', ...common, '--sandbox', 'workspace-write', '-'];
+    ? ['exec', 'resume', ...common, '-c', `sandbox_mode="${sandbox}"`, resume, '-']
+    : ['exec', ...common, '--sandbox', sandbox, '-'];
+}
+// Questions run read-only on the small model: Codex can look but not change anything, and nothing is tested or reviewed.
+export async function answerQuestion(root, question, deps) {
+  const choice = loadModels(deps.env).codex.small;
+  console.log(`Answering read-only with Codex ${choice.model}; nothing will change. Use /task to run it as a task instead.`);
+  const run = await runCodex(root, execArgs(choice, { sandbox: 'read-only' }), `Answer this question about the project in this folder. Do not modify anything. Be brief.\n\nQUESTION\n${question}`, deps);
+  console.log(`(${tokenLine(run.tokens)})`);
 }
 export function reviewArgs(choice) {
   const model = choice ? ['--model', choice.model, '--effort', choice.effort] : [];
@@ -386,6 +393,11 @@ export async function runAll(root, state, deps, { mode = 'exec' } = {}) {
   try {
     await stage('build', () => runBuild(root, state, deps, { mode }));
     for (;;) {
+      if (!reviewDiff(root, task).diff.trim()) {
+        task.status = 'no_changes';
+        console.log(`Codex made no changes · ${tokenLine(task.routing.build.tokens)}. Nothing to test or review.`);
+        break;
+      }
       const builtHash = diffHash(root, task);
       checkpoint(root, state, 'built', { diffHash: builtHash });
       console.log(`Codex finished · ${tokenLine(task.routing.build.tokens)} so far. That alone isn't proof the checks passed.`);

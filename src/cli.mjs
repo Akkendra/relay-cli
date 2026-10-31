@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { createTask, initialize, projectRoot, readState, locked, runAll, requireSubscriptionEnvironment } from './relay.mjs';
+import { answerQuestion, createTask, initialize, projectRoot, readState, locked, runAll, requireSubscriptionEnvironment } from './relay.mjs';
 import { loadModels } from './routing.mjs';
 
 // `relay` with no arguments: a prompt where each line is a task. Codex runs inside it, then tests (with consent),
@@ -12,6 +12,8 @@ and you can ask for fixes until you're done. Nothing is committed or pushed.
   /status              the current task: status, models, tokens
   /history             earlier tasks in this folder
   /models              which models each tier uses (~/.config/relay/models.json)
+  /ask <question>      answer a question read-only (also automatic for lines ending in ? or starting with where/what/why/how…)
+  /task <text>         run the line as a task even if it reads like a question
   /interactive <task>  run a task in Codex's own window, with its approval prompts
   /help                this help
   /quit                leave (or Ctrl-D)`;
@@ -68,7 +70,12 @@ export async function repl(cwd, deps) {
       } else if (command === '/interactive') {
         if (!rest.length) console.log('Usage: /interactive <task>');
         else await runTask(root, rest.join(' '), deps, 'interactive');
+      } else if (command === '/ask' || command === '/task') {
+        if (!rest.length) console.log(`Usage: ${command} <text>`);
+        else if (command === '/ask') await ask(root, rest.join(' '), deps);
+        else await runTask(root, rest.join(' '), deps, 'exec');
       } else if (command.startsWith('/')) console.log(`Unknown command ${command}. Type /help.`);
+      else if (isQuestion(input)) await ask(root, input, deps);
       else await runTask(root, input, deps, 'exec');
     } catch (e) {
       console.log(`✖ ${e.message}`);
@@ -76,6 +83,11 @@ export async function repl(cwd, deps) {
   }
 }
 
+export const isQuestion = text => /\?\s*$/.test(text) || /^(where|what|why|how|which|who|when|explain|is there|are there|does|do i|can i)\b/i.test(text);
+async function ask(root, question, deps) {
+  requireSubscriptionEnvironment(deps.env);
+  await locked(root, () => answerQuestion(root, question, deps));
+}
 async function runTask(root, goal, deps, mode) {
   requireSubscriptionEnvironment(deps.env);
   await locked(root, async () => {
