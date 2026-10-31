@@ -28,6 +28,7 @@ Relay uses **GitHub Flow**: `main` always works, and every change reaches it thr
    Fill in the pull request template.
 5. **Wait for CI to pass.** It runs the tests on Linux (Node 22 and 26) and macOS, builds the dashboard, and runs `npm audit`.
 6. **Squash-merge** once CI is green and the change has been reviewed. The branch is deleted automatically.
+   If `main` moved in the meantime, update the branch first (`git rebase origin/main` and push, or **Update branch** on the PR).
 7. **Update your local copy:**
    ```bash
    git switch main && git pull && git branch -d <branch>
@@ -37,13 +38,17 @@ One change per branch. If a branch drifts far from `main`, rebase it (`git rebas
 
 ## Protecting `main`
 
-GitHub Free doesn't offer branch protection for private repositories, so a git hook enforces it locally. Enable it once per clone:
+A GitHub ruleset ("Protect main") enforces this workflow for everyone, the repository owner included:
+- changes reach `main` only through a pull request, and only by squash merge;
+- all three CI jobs must pass, against a branch that's up to date with `main`;
+- review conversations must be resolved;
+- no force-pushes, no deleting `main`, and history stays linear.
+
+A local hook gives faster feedback by refusing a push to `main` before it reaches GitHub. Enable it once per clone:
 
 ```bash
 git config core.hooksPath .githooks
 ```
-
-The hook then refuses any push to `main`. In an emergency, `git push --no-verify` skips it. If the repository becomes public or moves to GitHub Pro, add a branch ruleset that requires the CI checks to pass before merging.
 
 ## Releases
 
