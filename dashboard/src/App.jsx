@@ -9,7 +9,7 @@ import { Setup } from './components/Setup.jsx';
 import { Runs } from './components/Runs.jsx';
 import { Board } from './components/Board.jsx';
 import { LatestRun } from './components/LatestRun.jsx';
-import { Clock, Core } from './components/Hud.jsx';
+import { Core } from './components/Hud.jsx';
 import { METRICS, mergeLayout, metricName, metricValue, projectName } from './format.js';
 import { usePersisted, useSummary } from './hooks.js';
 
@@ -72,7 +72,6 @@ export function App() {
                 </option>)}
             </select>
           )}
-          <Clock />
           {editing && <button type="button" onClick={() => setLayout(DEFAULT_LAYOUT)}>Reset layout</button>}
           <button type="button" aria-pressed={editing} onClick={() => setEditing(v => !v)}>{editing ? 'Done' : 'Edit'}</button>
           <button type="button" className="icon" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(NEXT_THEME[theme])}>{theme === 'dark' ? '☀' : '☾'}</button>

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { get } from 'node:http';
@@ -90,6 +90,10 @@ test('Relay projects are discovered from session folders with review usage and t
   assert.equal(task.review.model, 'claude-test'); assert.equal(task.review.tokens.total, 62); assert.equal(task.review.costUSD, 0.05);
   assert.equal(task.sessions.find(s => s.provider === 'claude').isReview, true);
   assert.equal(task.sessions.find(s => s.provider === 'codex').isReview, false);
+  assert.equal(summarize({ home, now }).runs[0].goal, 'Add a feature');
+  const file = join(home, 'proj', '.relay', 'state.json'), state = JSON.parse(readFileSync(file, 'utf8'));
+  state.task.run.ask = 'make it blue'; writeFileSync(file, JSON.stringify(state));
+  assert.equal(summarize({ home, now }).runs[0].goal, 'Follow-up: make it blue', 'a follow-up run shows its own ask');
 });
 test('the first prompt skips injected context and hides credentials', async () => {
   const { promptLine } = await import('../src/usage.mjs');
@@ -106,6 +110,16 @@ test('a project filter limits sessions and charts to that folder but keeps the p
   assert.equal(other.sessions.length, 0); assert.equal(other.daily.at(-1).codex.total, 0); assert.equal(other.runs.length, 0);
   assert.deepEqual(other.projects, [{ path: '~/proj', sessions: 2 }]); assert.equal(other.limits.codex.primary.usedPercent, 20);
   assert.equal(summarize({ home, now, project: '~/proj' }).sessions.length, 2);
+});
+test('the project list leaves out the home folder, temp folders and deleted folders', t => {
+  const { home } = fakeHome(t);
+  const dir = join(home, '.claude', 'projects', '-x');
+  mkdirSync(dir, { recursive: true });
+  const line = (cwd, i) => JSON.stringify({ type: 'user', timestamp: '2026-10-30T12:01:00Z', sessionId: `x-${i}`, cwd, message: { content: 'hi' } });
+  [home, '/private/var/folders/ab/T/tmp.1', '/tmp/probe', join(home, 'deleted')].forEach((cwd, i) => writeFileSync(join(dir, `${i}.jsonl`), line(cwd, i) + '\n'));
+  const s = summarize({ home, now });
+  assert.deepEqual(s.projects.map(p => p.path), ['~/proj']);
+  assert.equal(s.sessions.length, 6, 'their sessions still count everywhere else');
 });
 test('missing log folders produce an empty summary instead of an error', t => {
   const home = tempDir(t, 'relay-empty-');
