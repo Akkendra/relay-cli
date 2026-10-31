@@ -10,6 +10,10 @@ test('clear small and large tasks are decided by rules alone', () => {
   const large = 'Refactor the authentication flow across the codebase to support token rotation. (1) migrate the session schema (2) keep existing logins working (3) add concurrency-safe refresh (4) update docs (5) add tests (6) benchmark performance';
   assert.equal(scoreTask(large).tier, 'large');
 });
+test('building from a PDF is always large, however short the ask', () => {
+  assert.equal(scoreTask('check the pdf and build me that app').tier, 'large');
+  assert.equal(scoreTask('build it from ./brief.pdf').tier, 'large');
+});
 test('borderline tasks go to the classifier and fall back safely when it fails', () => {
   const goal = 'Add an export button to the reports page that downloads the visible rows as a CSV file, keeps the current filters, and shows a short confirmation message when the download starts';
   assert.equal(scoreTask(goal).borderline, true);

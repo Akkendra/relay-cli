@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, readFileSy
 import { tmpdir } from 'node:os';
 import { join, delimiter } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { initialize, createTask, reviewPacket, projectRoot, buildArgs, reviewArgs, main } from '../src/relay.mjs';
+import { initialize, createTask, reviewPacket, projectRoot, buildArgs, reviewArgs, REVIEW_TOOLS, MAX_FIX_ROUNDS, main } from '../src/relay.mjs';
 
 // realpath keeps the macOS fix: tmpdir() is a symlink, and git reports resolved paths.
 function tempDir(t, prefix) {
@@ -51,16 +51,19 @@ test('review captures staged, unstaged, and untracked changes without staging', 
   const saved = JSON.parse(readFileSync(join(root, '.relay', 'state.json'), 'utf8'));
   assert.equal(saved.task.id, next.id); assert.deepEqual(saved.history.map(h => h.id), [task.id], 'the earlier task moves to history');
 });
-test('large review is rejected instead of silently losing changes', t => {
+test('a diff over 100 KB is not inlined: the reviewer gets the file list, and the hash still covers it all', t => {
   const { root } = fixture(t); const task = createTask(root, 'large change');
   writeFileSync(join(root, 'app.txt'), 'x'.repeat(100001));
-  assert.throws(() => reviewPacket(root, task), /100 KB/);
+  const packet = reviewPacket(root, task);
+  assert.match(packet.prompt, /DIFF\n\(Not included: 100 KB is over[\s\S]*Read every changed file[\s\S]*\napp\.txt$/);
+  assert.doesNotMatch(packet.prompt, /x{1000}/); assert.match(packet.diff, /x{1000}/, 'the secret scan and quote check still see the whole diff');
 });
 test('provider arguments preserve approval path and remove reviewer tools', () => {
   const args = buildArgs({ goal: 'literal $(do-not-execute)' });
   assert.equal(args[args.indexOf('--ask-for-approval') + 1], 'on-request'); assert.ok(!args.includes('--yolo'));
   assert.equal(args[args.indexOf('--sandbox') + 1], 'workspace-write');
-  const review = reviewArgs(); assert.equal(review[review.indexOf('--tools') + 1], '');
+  const review = reviewArgs(); assert.equal(review[review.indexOf('--tools') + 1], REVIEW_TOOLS); assert.ok(!REVIEW_TOOLS.match(/Bash|Edit|Write/));
+  assert.ok(review.includes('Read(**/.env*)'), 'credential files stay unreadable');
   assert.equal(review[review.indexOf('--disallowedTools') + 1], 'mcp__*');
 });
 
@@ -95,7 +98,8 @@ if (args[0] === 'exec') {
   fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
 }
 process.exit(Number(process.env.FAKE_CODEX_EXIT || 0));`,
-  npm: `fs.writeFileSync(log('npm.json'), JSON.stringify(process.argv.slice(2)));
+  npm: `if (process.argv[2] === 'run') { fs.writeFileSync(log('npm-run.json'), JSON.stringify(process.argv.slice(2))); console.log('ready on http://localhost:5173/'); process.exit(0); }
+fs.writeFileSync(log('npm.json'), JSON.stringify(process.argv.slice(2)));
 const runs = (fs.existsSync(log('npm-count')) ? Number(fs.readFileSync(log('npm-count'), 'utf8')) : 0) + 1;
 fs.writeFileSync(log('npm-count'), String(runs));
 if (runs <= Number(process.env.FAKE_NPM_FAIL_TIMES || 0)) { process.stdout.write('1 failing: cart total\\n'); process.exit(1); }
@@ -110,8 +114,13 @@ if (fs.readFileSync(log('claude-input.txt'), 'utf8').startsWith('Answer a questi
 }
 if (mode === 'exit1') { console.error('authentication expired'); process.exit(1); }
 if (mode === 'badjson') { console.log('not json'); process.exit(0); }
-console.log(JSON.stringify({ is_error: mode === 'is_error', result: 'Findings: one possible bug.', usage: null }));`,
+const reviews = (fs.existsSync(log('review-count')) ? Number(fs.readFileSync(log('review-count'), 'utf8')) : 0) + 1;
+fs.writeFileSync(log('review-count'), String(reviews));
+const result = reviews <= Number(process.env.FAKE_CLAUDE_FINDINGS || 0) ? 'Findings: one possible bug.' : 'NO_FINDINGS';
+console.log(JSON.stringify({ is_error: mode === 'is_error', result, usage: null }));`,
+  open: `fs.writeFileSync(log('open.json'), JSON.stringify(process.argv.slice(2)));`,
 };
+fakes['xdg-open'] = fakes.open;
 function runHarness(t, { env = {}, answer = true, omit = [], packageJson = { scripts: { test: 'node --test' } }, beforeAnswer = () => {},
   goal = 'Add feature; test it', choices = [], classify, limits = {} } = {}) {
   const { root, git } = fixture(t);
@@ -147,7 +156,7 @@ test('run builds, tests with consent, and sends unstaged new files and evidence 
   assert.match(h.read('codex-prompt-1.txt'), /Implement this bounded task: Add feature; test it[\s\S]*Do not push, commit, or deploy/);
   assert.deepEqual(JSON.parse(h.read('npm.json')), ['test']);
   assert.deepEqual(JSON.parse(h.read('claude.json')), reviewArgs({ model: 'haiku', effort: 'low' }), 'a small diff gets the small reviewer');
-  assert.equal(h.plans.length, 2, 'the build plan, then what to do after the review'); assert.equal(h.classified.length, 0, 'clear-cut tasks never call the classifier');
+  assert.equal(h.plans.length, 1, 'only the build plan; nothing waits after a clean review'); assert.equal(h.classified.length, 0, 'clear-cut tasks never call the classifier');
   assert.equal(h.prompts.length, 1); assert.match(h.prompts[0], /npm test/);
   const packet = h.read('claude-input.txt');
   assert.match(packet, /export const feature = 1/); assert.match(packet, /src\/feature\.js/);
@@ -155,7 +164,7 @@ test('run builds, tests with consent, and sends unstaged new files and evidence 
   assert.equal(h.git('diff', '--cached', '--name-only').toString(), '');
   assert.equal(h.git('rev-parse', 'HEAD').toString().trim(), h.state().baseCommit, 'nothing is committed');
   const task = h.state();
-  assert.equal(task.status, 'needs_human_decision');
+  assert.equal(task.status, 'done');
   assert.deepEqual(task.run.steps.map(s => s.step), ['started', 'built', 'testing', 'tests_recorded', 'reviewed', 'done']);
   assert.equal(task.run.tests.diffHash, task.reviewHash);
   assert.equal(task.routing.build.tier, 'small'); assert.equal(task.routing.build.source, 'rules');
@@ -180,7 +189,7 @@ test('run without a test script skips the consent prompt and records it', async 
 });
 test('failed tests stop the run, save the failure, and skip review', async t => {
   const h = runHarness(t, { env: { FAKE_NPM_EXIT: '1' } });
-  await assert.rejects(h.run(), /npm test failed \(exit 1\).*not complete/);
+  await assert.rejects(h.run(), new RegExp(`npm test still fails after ${MAX_FIX_ROUNDS} fix rounds \\(exit 1\\).*not complete`));
   assert.ok(!h.logged('claude.json'));
   assert.equal(h.state().status, 'tests_failed');
   const failure = JSON.parse(readFileSync(join(h.root, '.relay', 'test-failure.json'), 'utf8'));
@@ -257,43 +266,76 @@ test('the build plan can be bumped up before Codex starts, and borderline tasks 
   assert.equal(task.routing.build.source, 'you');
   const args = JSON.parse(h.read('codex.json'));
   assert.equal(args[args.indexOf('-m') + 1], task.routing.build.model);
-  assert.equal(h.plans.length, 3, 'the plan twice (after the change), then the after-review prompt');
+  assert.equal(h.plans.length, 2, 'the plan twice: before and after the change');
+});
+test('a PDF build is large: Codex leads subagents and is told to use its skills', async t => {
+  const h = runHarness(t, { goal: 'check the pdf here and build me that app' });
+  await h.run();
+  assert.equal(h.state().routing.build.tier, 'large');
+  assert.match(h.read('codex-prompt-1.txt'), /act as the lead agent[\s\S]*spawn one subagent per part[\s\S]*Use your installed skills and plugins/);
+});
+test('relay review picks the loop up on the current changes without a new build', async t => {
+  const h = runHarness(t);
+  await assert.rejects(main(['review'], h.root, h.deps), /has not been built yet/);
+  await h.run();
+  await main(['review'], h.root, { ...h.deps, env: { ...h.deps.env, FAKE_CLAUDE_FINDINGS: '2' } });
+  assert.equal(JSON.parse(h.read('npm-count')), 3, 'tests ran again'); assert.ok(!h.logged('codex-3.json'), 'only one fix round, no new build');
+  assert.deepEqual(JSON.parse(h.read('codex-2.json')).slice(0, 2), ['exec', 'resume']);
+  assert.equal(h.state().status, 'done');
 });
 test('cancelling the build plan starts nothing', async t => {
   const h = runHarness(t, { choices: ['q'] });
   await assert.rejects(h.run(), /Cancelled before Codex started/);
   assert.ok(!h.logged('codex.json')); assert.equal(h.state().run.steps.at(-1).step, 'cancelled');
 });
-test('after a review, "f" sends the findings back to the same Codex session and verifies again', async t => {
-  const h = runHarness(t, { choices: ['', 'f', ''] });
+test('review findings go back to the same Codex session on a bigger model, then tests and review run again', async t => {
+  const h = runHarness(t, { env: { FAKE_CLAUDE_FINDINGS: '1' } });
   await h.run();
   const fix = JSON.parse(h.read('codex-2.json'));
   assert.deepEqual(fix.slice(0, 2), ['exec', 'resume']); assert.equal(fix.at(-2), 'thread-fake', 'the same session is resumed');
   assert.equal(fix[fix.indexOf('-c', fix.indexOf('approval_policy="never"') - 1) + 1], 'approval_policy="never"');
-  assert.ok(fix.includes('sandbox_mode="workspace-write"'));
+  assert.ok(fix.includes('sandbox_mode="workspace-write"')); assert.equal(fix[fix.indexOf('-m') + 1], 'gpt-6.1-sol', 'the fix runs one tier up');
   assert.match(h.read('codex-prompt-2.txt'), /Claude independently reviewed[\s\S]*Findings: one possible bug\./);
-  assert.equal(h.prompts.length, 2, 'tests ask for consent again after the fix');
+  assert.equal(h.prompts.length, 1, 'consent is asked once per run'); assert.equal(h.plans.length, 1, 'no prompt between rounds');
   const task = h.state();
   assert.deepEqual(task.run.steps.map(s => s.step).filter(s => s !== 'testing' && s !== 'tests_recorded'),
     ['started', 'built', 'reviewed', 'fix_requested', 'built', 'reviewed', 'done']);
+  assert.equal(task.status, 'done');
   assert.equal(task.codexRuns.length, 2); assert.equal(task.routing.build.tokens.total, 1880, 'tokens add up across the build and the fix');
   assert.match(h.read('claude-input.txt'), /feature-2\.js/, 'the second review sees the fix');
 });
-test('typed follow-up instructions go to Codex instead of the findings', async t => {
-  const h = runHarness(t, { choices: ['', 'also add a README section', ''] });
+test('the fix loop stops after the last round with findings still open, escalating as it goes', async t => {
+  const h = runHarness(t, { env: { FAKE_CLAUDE_FINDINGS: '99' } });
   await h.run();
-  assert.match(h.read('codex-prompt-2.txt'), /Follow-up from the user: also add a README section/);
+  const models = Array.from({ length: MAX_FIX_ROUNDS + 1 }, (_, i) => { const a = JSON.parse(h.read(`codex-${i + 1}.json`)); return a[a.indexOf('-m') + 1]; });
+  assert.deepEqual(models, ['gpt-6-luna', 'gpt-6.1-sol', ...Array(MAX_FIX_ROUNDS - 1).fill('gpt-6-astra')]);
+  assert.ok(!h.logged(`codex-${MAX_FIX_ROUNDS + 2}.json`));
+  assert.equal(h.state().status, 'needs_human_decision'); assert.equal(h.prompts.length, 1);
+  assert.ok(!h.logged('open.json'), 'the app only starts after a clean review');
+});
+test('a clean review starts the dev script and opens its URL; a static site opens index.html', async t => {
+  const h = runHarness(t, { packageJson: { scripts: { test: 'node --test', dev: 'vite' } } });
+  await h.run();
+  // The browser opener is detached, so wait for it to log.
+  const opened = async x => { for (let i = 0; i < 30 && !x.logged('open.json'); i++) await new Promise(r => setTimeout(r, 100)); return JSON.parse(x.read('open.json')); };
+  assert.deepEqual(JSON.parse(h.read('npm-run.json')), ['run', 'dev']);
+  assert.deepEqual(await opened(h), ['http://localhost:5173/']);
+  assert.equal(h.prompts.length, 1, 'the same consent covers tests and the app');
+  const s = runHarness(t, { packageJson: null });
+  writeFileSync(join(s.root, 'index.html'), '<h1>hi</h1>');
+  await s.run();
+  assert.deepEqual(await opened(s), [join(s.root, 'index.html')]); assert.equal(s.prompts.length, 0);
 });
 test('failing tests can be fixed without leaving: the failure goes to Codex, then tests and review run again', async t => {
-  const h = runHarness(t, { env: { FAKE_NPM_FAIL_TIMES: '1' }, choices: ['', 'f', ''] });
+  const h = runHarness(t, { env: { FAKE_NPM_FAIL_TIMES: '1' } });
   await h.run();
   assert.match(h.read('codex-prompt-2.txt'), /npm test failed[\s\S]*1 failing: cart total/);
   const steps = h.state().run.steps.map(s => s.step);
   assert.ok(steps.includes('tests_failed') && steps.at(-1) === 'done');
-  assert.equal(h.state().status, 'needs_human_decision');
+  assert.equal(h.state().status, 'done');
 });
 test('the interactive prompt runs tasks back to back, each reviewed on its own changes', async t => {
-  const h = runHarness(t);
+  const h = runHarness(t, { choices: ['', 'n'] });
   const lines = ['add a banner', '/status', 'add a footer', '/history', '/nope', '/quit'], logs = [];
   const original = console.log; console.log = (...a) => logs.push(a.join(' '));
   try { await main([], h.root, { ...h.deps, isTTY: true, readLine: async () => lines.shift() ?? null }); }
@@ -302,8 +344,8 @@ test('the interactive prompt runs tasks back to back, each reviewed on its own c
   assert.equal(saved.task.goal, 'add a footer'); assert.deepEqual(saved.history.map(x => x.goal), ['Add feature; test it', 'add a banner']);
   const packet = h.read('claude-input.txt');
   assert.match(packet, /feature-2\.js/); assert.doesNotMatch(packet, /src\/feature\.js/, "the first task's file is part of the second task's baseline");
-  assert.ok(logs.some(l => l.includes('needs_human_decision · add a banner')), '/status shows the current task');
-  assert.ok(logs.some(l => /^2\. needs_human_decision · add a banner/m.test(l)), '/history lists earlier tasks');
+  assert.ok(logs.some(l => l.includes('done · add a banner')), '/status shows the current task');
+  assert.ok(logs.some(l => /^2\. done · add a banner/m.test(l)), '/history lists earlier tasks');
   assert.ok(logs.some(l => l.includes('Unknown command /nope')));
   assert.ok(!existsSync(join(h.root, '.relay', 'lock')), 'the lock is only held while a task runs');
 });
@@ -379,7 +421,7 @@ test('near a plan limit, the build and review are capped at cheaper tiers, with 
   assert.equal(task.routing.review.model, 'haiku');
 });
 test('fix rounds get a follow-up review of only the new changes, with the earlier findings', async t => {
-  const h = runHarness(t, { choices: ['', 'f', ''] });
+  const h = runHarness(t, { env: { FAKE_CLAUDE_FINDINGS: '1' } });
   await h.run();
   const packet = h.read('claude-input.txt');
   assert.match(packet, /FOLLOW-UP REVIEW[\s\S]*EARLIER FINDINGS\nFindings: one possible bug\./);
@@ -396,6 +438,17 @@ test('/continue sends a follow-up to the same Codex session without a new task',
   assert.deepEqual(args.slice(0, 2), ['exec', 'resume']); assert.equal(args.at(-2), 'thread-fake');
   assert.match(h.read('codex-prompt-2.txt'), /Follow-up from the user: make it blue/);
   assert.equal(h.saved().task.goal, 'add a banner'); assert.equal(h.saved().history.length, 1);
+});
+test('a plain line while the task has changes follows up on it by default', async t => {
+  const h = runHarness(t);
+  const lines = ['add a banner', 'fix the findings', '/quit'];
+  const original = console.log; console.log = () => {};
+  try { await main([], h.root, { ...h.deps, readLine: async () => lines.shift() ?? null }); }
+  finally { console.log = original; }
+  assert.match(h.plans[1], /follow up on the current task · \[n\] new task/);
+  assert.deepEqual(JSON.parse(h.read('codex-2.json')).slice(0, 2), ['exec', 'resume']);
+  assert.match(h.read('codex-prompt-2.txt'), /Follow-up from the user: fix the findings/);
+  assert.equal(h.saved().history.length, 1, 'no new task');
 });
 test('reviews get imported files as context and quotes are checked against the diff', async t => {
   const { root } = fixture(t);
@@ -439,14 +492,14 @@ test('flagged actions are recorded without stopping the run, and show in the run
   const h = runHarness(t, { env: { FAKE_CODEX_TOUCH: 'package.json' } });
   await h.run();
   const task = h.state();
-  assert.equal(task.status, 'needs_human_decision');
+  assert.equal(task.status, 'done');
   assert.deepEqual(task.run.flags.map(f => [f.level, f.kind, f.target]), [['flag', 'paths', 'package.json']]);
   assert.ok(task.run.trace.some(e => e.kind === 'file_change') && task.run.trace.some(e => e.kind === 'agent_message'));
   const { summarize } = await import('../src/usage.mjs');
   const fakeSession = join(h.home, '.codex', 'sessions'); mkdirSync(fakeSession, { recursive: true });
   writeFileSync(join(fakeSession, 'r.jsonl'), JSON.stringify({ timestamp: new Date().toISOString(), type: 'session_meta', payload: { id: 's1', cwd: h.root, timestamp: new Date().toISOString() } }) + '\n');
   const [run] = summarize({ home: h.home }).runs;
-  assert.equal(run.status, 'needs_human_decision'); assert.equal(run.flags.length, 1); assert.ok(run.trace.length > 0); assert.ok(run.build.model);
+  assert.equal(run.status, 'done'); assert.equal(run.flags.length, 1); assert.ok(run.trace.length > 0); assert.ok(run.build.model);
 });
 test('asks are capped at 2500 words and attach text files and images by path', async t => {
   const { prepareAsk, execArgs } = await import('../src/relay.mjs');
@@ -464,6 +517,8 @@ test('asks are capped at 2500 words and attach text files and images by path', a
   assert.match(a.text, /ATTACHED FILE My Notes\/spec\.md\nPromo SCOOP10 applies once\./);
   assert.deepEqual(prepareAsk(root, 'add/remove items, see src/missing.js').files, [], 'words with slashes that are not files stay text');
   assert.throws(() => prepareAsk(root, '@creds.txt'), /looks like it holds a credential/);
+  writeFileSync(join(root, 'brief.pdf'), '%PDF-1.7\0binary');
+  assert.match(prepareAsk(root, 'build the app in ./brief.pdf').text, /ATTACHED FILE \.\/brief\.pdf\n\(PDF: read it from disk\.\)/, 'PDFs are referenced, not inlined');
   assert.deepEqual(execArgs({ model: 'm', effort: 'low' }, { images: ['/a.png'] }).slice(0, 4), ['exec', '--image', '/a.png', '--json']);
 });
 test('lockfiles stay out of the reviewed diff and runs print a short summary', async t => {
@@ -473,7 +528,7 @@ test('lockfiles stay out of the reviewed diff and runs print a short summary', a
   const packet = h.read('claude-input.txt');
   assert.doesNotMatch(packet, /y{1000}/, 'the 150 KB lockfile is not sent');
   assert.match(packet, /GENERATED LOCKFILES CHANGED[^\n]*\npackage-lock\.json/);
-  assert.equal(h.state().status, 'needs_human_decision', 'the review ran despite the big lockfile');
+  assert.equal(h.state().status, 'done', 'the review ran despite the big lockfile');
   const text = out.join('');
   assert.match(text, /npm test passed/); assert.doesNotMatch(text, /tests ok: 3 passed/, 'test output is summarized, not streamed');
 });
