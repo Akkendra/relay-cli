@@ -30,7 +30,7 @@ test('reviews are sized by the actual diff, and sensitive files get the large re
 test('model names can be overridden in ~/.config/relay/models.json, and bad values are rejected', t => {
   const home = mkdtempSync(join(tmpdir(), 'relay-models-'));
   t.after(() => rmSync(home, { recursive: true, force: true }));
-  assert.deepEqual(loadModels({ HOME: home }), DEFAULT_MODELS);
+  assert.deepEqual(loadModels({ HOME: home }), { ...DEFAULT_MODELS, codexNetwork: false });
   mkdirSync(join(home, '.config', 'relay'), { recursive: true });
   writeFileSync(join(home, '.config', 'relay', 'models.json'), JSON.stringify({ codex: { small: { model: 'gpt-7-mini' } } }));
   const models = loadModels({ HOME: home });
@@ -53,4 +53,16 @@ test('limit caps only ever lower the tier', async () => {
   assert.equal(capForLimits('large', { primary: { usedPercent: 80 } }, 'Codex').tier, 'medium');
   assert.equal(capForLimits('medium', { secondary: { usedPercent: 95, windowMinutes: 10080 } }, 'Claude').note, 'Claude is at 95% of its weekly limit, so capped at small');
   assert.deepEqual(capForLimits('small', { primary: { usedPercent: 99 } }, 'Codex'), { tier: 'small', note: null });
+});
+test('Codex network access is opt-in and only widens the workspace-write sandbox', async () => {
+  const { execArgs } = await import('../src/relay.mjs');
+  const { loadModels } = await import('../src/routing.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'relay-net-'));
+  assert.equal(loadModels({ XDG_CONFIG_HOME: dir }).codexNetwork, false);
+  mkdirSync(join(dir, 'relay')); writeFileSync(join(dir, 'relay', 'models.json'), '{"codexNetwork": true}');
+  assert.equal(loadModels({ XDG_CONFIG_HOME: dir }).codexNetwork, true);
+  const c = { model: 'm', effort: 'low' }, flag = 'sandbox_workspace_write.network_access=true';
+  assert.ok(execArgs(c, { network: true }).includes(flag));
+  assert.ok(!execArgs(c).includes(flag));
+  assert.ok(!execArgs(c, { network: true, sandbox: 'read-only' }).includes(flag), 'read-only questions never get network');
 });

@@ -405,6 +405,7 @@ test('reviews get imported files as context and quotes are checked against the d
   assert.match(packet.prompt, /UNCHANGED FILES THE CHANGED CODE IMPORTS[\s\S]*--- src\/cart\.js\nexport const total/);
   const { unverifiedQuotes } = await import('../src/relay.mjs');
   assert.deepEqual(unverifiedQuotes('Bug at `export const line = () => total();` and `throw new Error(oops)`; see `src/cart.js`', packet.diff), ['throw new Error(oops)']);
+  assert.deepEqual(unverifiedQuotes('Covers only `cart.js` logic (5 tests). The `disabled` attribute and `throw new Error(oops)`', packet.diff), ['throw new Error(oops)'], 'short spans keep backticks paired; bare names are not quotes');
 });
 test('a likely secret in the diff blocks the review before anything is sent to Claude', async t => {
   // Built at runtime so the repository never contains a key-shaped literal.

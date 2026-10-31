@@ -126,10 +126,11 @@ function importedContext(root, changed, task) {
   }
   return picked.length ? `\n\nUNCHANGED FILES THE CHANGED CODE IMPORTS (context only, not part of the change)\n${picked.map(p => `--- ${p.file}\n${p.body}`).join('\n')}` : '';
 }
-// Quotes in backticks that don't appear in the diff mark findings Relay can't verify.
+// Code quotes in backticks that don't appear in the diff (changed or context lines) mark findings Relay can't verify.
+// Every span is matched so short ones keep the backticks paired; bare names and file paths aren't quotes.
 export function unverifiedQuotes(review, diff) {
-  const lines = diff.split('\n').filter(l => /^[+-]/.test(l)).map(l => l.slice(1));
-  return [...review.matchAll(/`([^`\n]{8,})`/g)].map(m => m[1].trim()).filter(q => !lines.some(l => l.includes(q)) && !/[\/.]\w+$/.test(q));
+  const lines = diff.split('\n').filter(l => /^[+\- ]/.test(l)).map(l => l.slice(1));
+  return [...review.matchAll(/`([^`\n]+)`/g)].map(m => m[1].trim()).filter(q => q.length >= 8 && !/^[\w-]+$/.test(q) && !/[\/.]\w+$/.test(q) && !lines.some(l => l.includes(q)));
 }
 // Likely credentials in added lines. Anything that matches stops Relay from sending the text to a provider.
 const SECRETS = [/AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /\bgh[pousr]_[A-Za-z0-9]{30,}/, /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/,
@@ -190,8 +191,10 @@ export function buildArgs(task, choice = DEFAULT_MODELS.codex.medium) {
 }
 // Non-interactive Codex, which finishes on its own. It stays in the workspace-write sandbox and can never escalate:
 // with approval_policy "never", anything outside the sandbox is refused rather than auto-approved.
-export function execArgs(choice, { resume, sandbox = 'workspace-write' } = {}) {
-  const common = ['--json', '-m', choice.model, '-c', `model_reasoning_effort="${choice.effort}"`, '-c', 'approval_policy="never"'];
+// Network stays off unless the user opts in with "codexNetwork": true in models.json.
+export function execArgs(choice, { resume, sandbox = 'workspace-write', network = false } = {}) {
+  const common = ['--json', '-m', choice.model, '-c', `model_reasoning_effort="${choice.effort}"`, '-c', 'approval_policy="never"',
+    ...(network && sandbox === 'workspace-write' ? ['-c', 'sandbox_workspace_write.network_access=true'] : [])];
   return resume
     ? ['exec', 'resume', ...common, '-c', `sandbox_mode="${sandbox}"`, resume, '-']
     : ['exec', ...common, '--sandbox', sandbox, '-'];
@@ -330,11 +333,18 @@ function runTests(root, deps) {
 export function answer(question, { history, completer } = {}) {
   const rl = createInterface({ input: process.stdin, output: process.stdout, history, completer, historySize: 200 });
   return new Promise(resolve => {
-    let settled = false;
-    const finish = value => { if (!settled) { settled = true; resolve(value); } rl.close(); };
+    let settled = false, timer;
+    const lines = [];
+    const finish = value => { if (!settled) { settled = true; clearTimeout(timer); resolve(value); } rl.close(); };
     rl.on('SIGINT', () => { process.stdout.write('\n'); finish(null); });
-    rl.once('close', () => finish(null));
-    rl.question(question).then(finish, () => finish(null));
+    rl.once('close', () => finish(lines.length ? lines.join('\n') : null));
+    // A paste arrives as several lines at once; on a terminal, lines that land within 30ms stay one answer.
+    rl.on('line', line => {
+      lines.push(line);
+      if (!process.stdin.isTTY) return finish(line);
+      clearTimeout(timer); timer = setTimeout(() => finish(lines.join('\n')), 30);
+    });
+    rl.setPrompt(question); rl.prompt();
   });
 }
 async function ask(question) { return /^y(es)?$/i.test(((await answer(question)) ?? '').trim()); }
@@ -353,7 +363,11 @@ async function chooseBuild(root, task, deps) {
     const a = ((await deps.choose('[Enter] run · [b] bigger · [s] smaller · [q] cancel ')) ?? 'q').trim().toLowerCase();
     if (a === '') break;
     if (a === 'q') throw failure('Cancelled before Codex started; nothing was changed.', 'cancelled');
-    if (a === 'b' || a === 's') tier = shiftTier(tier, a === 'b' ? 1 : -1);
+    if (a === 'b' || a === 's') {
+      const next = shiftTier(tier, a === 'b' ? 1 : -1);
+      if (next === tier) console.log(`Already the ${a === 'b' ? 'largest' : 'smallest'} tier.`);
+      tier = next;
+    }
   }
   return { tier, ...models.codex[tier], source: tier === plan.tier ? plan.source : 'you', reasons: plan.reasons, classifierUsage: plan.classifierUsage };
 }
@@ -380,7 +394,7 @@ async function runBuild(root, state, deps, { mode = 'exec' } = {}) {
     if (mode === 'interactive') await interactive('codex', buildArgs(task, task.routing.build), root, deps.env);
     else {
       console.log('Codex is working. Progress appears below; Ctrl-C stops it.');
-      const run = await runCodex(root, execArgs(task.routing.build), buildPrompt(task), deps);
+      const run = await runCodex(root, execArgs(task.routing.build, { network: loadModels(deps.env).codexNetwork }), buildPrompt(task), deps);
       recordCodex(task, { ...run, kind: 'build' });
     }
     task.status = 'awaiting_review';
@@ -410,7 +424,7 @@ async function runFix(root, state, deps, request) {
   const resume = task.routing.build.sessionId ?? null;
   console.log(resume ? 'Codex is continuing the same session.' : 'Codex is starting a new session with the context.');
   try {
-    const run = await runCodex(root, execArgs(choice, { resume }), fixPrompt(task, request), deps);
+    const run = await runCodex(root, execArgs(choice, { resume, network: loadModels(deps.env).codexNetwork }), fixPrompt(task, request), deps);
     recordCodex(task, { ...run, kind: `fix:${request.kind}` });
     task.status = 'awaiting_review';
   } catch (e) {
