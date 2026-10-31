@@ -72,7 +72,7 @@ export function App() {
       {data && (
         <>
           <Board layout={layout} setLayout={setLayout} editing={editing} widgets={{
-            agents: { title: 'Agents', render: () => <Core sessions={data.sessions} now={now} /> },
+            agents: { title: 'Agents', render: () => <Core sessions={data.sessions} today={data.daily.at(-1)} now={now} /> },
             limits: { title: 'Plan limits', render: () => <Limits limits={data.limits} now={now} /> },
             codex: { title: 'Codex · all devices', render: () => <CodexAccount account={data.codexAccount} now={now} /> },
             claude: { title: 'Claude · this Mac', render: () => <CodexAccount provider="claude" account={data.claudeAccount} now={now} /> },
