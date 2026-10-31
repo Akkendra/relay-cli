@@ -35,5 +35,5 @@ function Agent({ provider, c }) {
 
 export function Setup({ catalog }) {
   if (!catalog) return null;
-  return <section><h2 className="section-title">Setup</h2><div className="grid tasks"><Agent provider="claude" c={catalog.claude} /><Agent provider="codex" c={catalog.codex} /></div></section>;
+  return <section id="setup"><h2 className="section-title">Setup</h2><div className="grid tasks"><Agent provider="claude" c={catalog.claude} /><Agent provider="codex" c={catalog.codex} /></div></section>;
 }

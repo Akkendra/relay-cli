@@ -9,7 +9,8 @@ export function startMotion(root) {
   const mm = gsap.matchMedia();
   let lenis = null;
   mm.add('(prefers-reduced-motion: no-preference)', () => {
-    lenis = new Lenis({ lerp: 0.12 });
+    // Lenis does the smoothing (no CSS scroll-behavior), and glides to #anchors too.
+    lenis = new Lenis({ lerp: 0.2, wheelMultiplier: 1.15, anchors: { offset: -72 } });
     lenis.on('scroll', ScrollTrigger.update);
     const tick = time => lenis.raf(time * 1000);
     gsap.ticker.add(tick); gsap.ticker.lagSmoothing(0);
@@ -23,7 +24,7 @@ export function startMotion(root) {
   mm.add('(prefers-reduced-motion: no-preference) and (min-width: 901px)', () => {
     const lines = root.querySelectorAll('.term p'), steps = root.querySelectorAll('.steps li');
     gsap.set(lines, { autoAlpha: 0, y: 6 });
-    const tl = gsap.timeline({ scrollTrigger: { trigger: root.querySelector('.play'), start: 'top top+=72', end: '+=220%', pin: root.querySelector('.play .stick'), scrub: 0.6 } });
+    const tl = gsap.timeline({ scrollTrigger: { trigger: root.querySelector('.play'), start: 'top top+=72', end: '+=150%', pin: root.querySelector('.play .stick'), scrub: 0.3 } });
     lines.forEach((line, i) => {
       tl.to(line, { autoAlpha: 1, y: 0, duration: 1 }, i);
       const step = Number(line.dataset.step);

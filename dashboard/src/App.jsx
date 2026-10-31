@@ -44,18 +44,20 @@ export function App() {
   const rows = days.map(d => ({ date: d.date, values: { codex: metricValue(d.codex, metric), claude: metricValue(d.claude, metric) } }));
   return (
     <main>
-      <header>
-        <div><h1>Relay</h1><div className="tagline">Your agent command center</div></div>
-        <span className={`pill ${error ? 'off' : 'on'}`}>{error ? 'Offline' : data ? 'Connected' : 'Connecting'}</span>
-        <span className="sub">{data ? `updated ${ago(data.generatedAt)}` : ''}</span>
-        <span className="spacer" />
-        <Clock />
-        <button type="button" title="Switch theme" onClick={() => setTheme(NEXT_THEME[theme])}>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
+      <header className="topbar">
+        <a className="brand" href="/">RELAY</a>
+        <nav className="sections" aria-label="Sections"><a href="#overview">Overview</a><a href="#usage">Usage</a><a href="#sessions">Sessions</a><a href="#setup">Setup</a></nav>
+        <div className="tools">
+          <span className={`pill ${error ? 'off' : 'on'}`}>{error ? 'Offline' : data ? `Live · updated ${ago(data.generatedAt)}` : 'Connecting'}</span>
+          <Clock />
+          <button type="button" className="icon" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(NEXT_THEME[theme])}>{theme === 'dark' ? '☀' : '☾'}</button>
+        </div>
       </header>
       {error && <div className="banner" role="alert">Can’t reach the dashboard server ({error}). Is relay dashboard still running?</div>}
       {data && (
         <>
-          <section className="hero"><Core live={data.sessions.filter(s => s.live).length} /><Limits limits={data.limits} now={now} /></section>
+          <section className="hero" id="overview"><Core live={data.sessions.filter(s => s.live).length} /><Limits limits={data.limits} now={now} /></section>
+          <div id="usage" />
           <CodexAccount account={data.codexAccount} now={now} />
           <CodexAccount provider="claude" account={data.claudeAccount} now={now} />
           <Tiles data={data} metric={metric} />

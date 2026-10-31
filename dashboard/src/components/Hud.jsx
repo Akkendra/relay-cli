@@ -6,7 +6,7 @@ export function Clock() {
   const pad = n => String(n).padStart(2, '0');
   return (
     <div className="clock" aria-label={now.toLocaleTimeString()}>
-      <span>{pad(now.getHours())}:{pad(now.getMinutes())}<small>:{pad(now.getSeconds())}</small></span>
+      <span>{pad(now.getHours())}:{pad(now.getMinutes())}</span>
       <em>{now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</em>
     </div>
   );

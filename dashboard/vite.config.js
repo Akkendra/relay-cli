@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 // dashboard server; changeOrigin makes the proxied Host match the server's loopback allowlist.
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
+  base: '/dashboard/',
   plugins: [react()],
   build: { outDir: fileURLToPath(new URL('../dist/dashboard', import.meta.url)), emptyOutDir: true, assetsInlineLimit: 0 },
   server: { host: '127.0.0.1', proxy: { '/api': { target: 'http://127.0.0.1:4318', changeOrigin: true } } },

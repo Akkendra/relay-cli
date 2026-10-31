@@ -53,15 +53,17 @@ export function startDashboard({ port = 4318, home = homedir(), configDir = rela
       res.writeHead(200, { ...headers, 'Content-Type': 'application/json' }).end(body);
       return;
     }
-    // The landing page (npm run build:site) is served at /welcome under the same strict policy.
-    const site = path === '/welcome' || path === '/welcome/' ? staticFile(siteDir, '/') : path.startsWith('/welcome/assets/') ? staticFile(siteDir, path.slice(8)) : null;
-    const asset = site ?? staticFile(distDir, path);
+    // / is the landing page (npm run build:site); /dashboard is the dashboard. Both use the same strict policy.
+    if (path === '/welcome' || path.startsWith('/welcome/')) { res.writeHead(301, { ...headers, Location: '/' }).end(); return; }
+    if (path === '/dashboard') { res.writeHead(301, { ...headers, Location: '/dashboard/' }).end(); return; }
+    const inDashboard = path.startsWith('/dashboard/');
+    const asset = staticFile(inDashboard ? distDir : siteDir, inDashboard ? path.slice('/dashboard'.length) : path);
     if (asset) {
       const cache = asset.immutable ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {};
       res.writeHead(200, { ...headers, ...cache, 'Content-Type': types[extname(asset.file)] ?? 'application/octet-stream' }).end(readFileSync(asset.file));
       return;
     }
-    if (path === '/') { res.writeHead(503, { ...headers, 'Content-Type': 'text/plain; charset=utf-8' }).end('Dashboard not built. In the Relay folder run: npm run build:dashboard'); return; }
+    if (path === '/' || path === '/dashboard/') { res.writeHead(503, { ...headers, 'Content-Type': 'text/plain; charset=utf-8' }).end(`Not built. In the Relay folder run: npm run ${path === '/' ? 'build:site' : 'build:dashboard'}`); return; }
     res.writeHead(404, headers).end('Not found');
   });
   return new Promise((yes, no) => {

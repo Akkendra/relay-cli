@@ -94,12 +94,12 @@ test('missing log folders produce an empty summary instead of an error', t => {
 });
 test('dashboard serves read-only data on loopback and rejects foreign hosts', async t => {
   const { home } = fakeHome(t);
-  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), readAccount: async () => null, now: () => now, distDir: fakeDist(t) });
+  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), readAccount: async () => null, now: () => now, distDir: fakeDist(t), siteDir: join(home, 'no-site') });
   t.after(() => server.close());
   const { address, port } = server.address();
   assert.equal(address, '127.0.0.1');
   const base = `http://127.0.0.1:${port}`;
-  const page = await fetch(`${base}/`);
+  const page = await fetch(`${base}/dashboard/`);
   assert.equal(page.status, 200); assert.match(page.headers.get('content-security-policy'), /default-src 'none'; script-src 'self'; style-src 'self'/);
   assert.equal(page.headers.get('cache-control'), 'no-store');
   assert.match(await page.text(), /<title>Relay Usage<\/title>/);
@@ -108,11 +108,12 @@ test('dashboard serves read-only data on loopback and rejects foreign hosts', as
   assert.equal((await fetch(`${base}/api/summary`, { method: 'POST' })).status, 405);
   // fetch drops custom Host headers, so a DNS-rebinding request is sent with node:http.
   assert.equal((await rawGet(port, '/api/summary', `evil.example:${port}`)).status, 421);
-  const asset = await rawGet(port, '/assets/app-abc123.js');
+  const asset = await rawGet(port, '/dashboard/assets/app-abc123.js');
   assert.equal(asset.status, 200); assert.match(asset.headers['content-type'], /^text\/javascript/); assert.match(asset.headers['cache-control'], /immutable/);
   assert.equal((await fetch(`${base}/nope`)).status, 404);
-  assert.equal((await rawGet(port, '/secret.txt')).status, 404);
-  for (const path of ['/assets/../secret.txt', '/assets/%2e%2e/secret.txt', '/assets/..%2fsecret.txt', '/assets/%2e%2e%2f%2e%2e%2fpackage.json', '/assets/%E0%A4%A']) {
+  assert.equal((await rawGet(port, '/dashboard/secret.txt')).status, 404);
+  assert.equal((await rawGet(port, '/dashboard')).status, 301);
+  for (const path of ['/dashboard/assets/../secret.txt', '/dashboard/assets/%2e%2e/secret.txt', '/dashboard/assets/..%2fsecret.txt', '/dashboard/assets/%2e%2e%2f%2e%2e%2fpackage.json', '/dashboard/assets/%E0%A4%A', '/assets/%2e%2e/secret.txt']) {
     const r = await rawGet(port, path);
     assert.equal(r.status, 404, path); assert.doesNotMatch(r.body, /outside assets|relay-local-prototype/);
   }
@@ -130,20 +131,22 @@ test('an explicitly allowed proxy host is accepted while other hosts stay blocke
 });
 test('an unbuilt dashboard explains how to build it while the API keeps working', async t => {
   const { home } = fakeHome(t);
-  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), readAccount: async () => null, now: () => now, distDir: join(home, 'missing-dist') });
+  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), readAccount: async () => null, now: () => now, distDir: join(home, 'missing-dist'), siteDir: join(home, 'missing-site') });
   t.after(() => server.close());
   const { port } = server.address();
-  const page = await rawGet(port, '/');
+  const page = await rawGet(port, '/dashboard/');
   assert.equal(page.status, 503); assert.match(page.body, /npm run build:dashboard/);
+  assert.match((await rawGet(port, '/')).body, /npm run build:site/);
   assert.equal((await rawGet(port, '/api/summary')).status, 200);
 });
-test('the landing page is served at /welcome with its assets, under the strict policy', async t => {
+test('the landing page is served at / with its assets, under the strict policy, and /welcome redirects there', async t => {
   const { home } = fakeHome(t);
   const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), readAccount: async () => null, distDir: fakeDist(t), siteDir: fakeDist(t) });
   t.after(() => server.close());
   const { port } = server.address();
-  const page = await rawGet(port, '/welcome');
+  const page = await rawGet(port, '/');
   assert.equal(page.status, 200); assert.match(page.body, /Relay Usage/); assert.match(page.headers['content-security-policy'], /script-src 'self'; style-src 'self'/);
-  assert.equal((await rawGet(port, '/welcome/assets/app-abc123.js')).status, 200);
-  assert.equal((await rawGet(port, '/welcome/assets/%2e%2e/secret.txt')).status, 404);
+  assert.equal((await rawGet(port, '/assets/app-abc123.js')).status, 200);
+  const old = await rawGet(port, '/welcome');
+  assert.equal(old.status, 301); assert.equal(old.headers.location, '/');
 });

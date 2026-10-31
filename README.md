@@ -51,7 +51,7 @@ relay> Create formatDuration(minutes). Acceptance: 0 -> '0m', 65 -> '1h 5m'; rej
 | `relay review` | Sends the diff to Claude for an advisory review. |
 | `relay run` | Same flow as typing the task at the prompt, for the current task. |
 | `relay status` | Prints `.relay/state.json`. |
-| `relay dashboard [--port N] [--allow-host NAME]` | Starts the read-only usage dashboard (default `http://localhost:4318`). |
+| `relay dashboard [--port N] [--allow-host NAME]` | Starts the local server: landing page at `http://localhost:4318`, read-only dashboard at `/dashboard`. |
 
 ## How a task runs
 
@@ -86,7 +86,7 @@ Codex sends its own instructions with every call (about 15K mostly cached input 
 ## Usage dashboard
 
 ```bash
-relay dashboard               # http://localhost:4318
+relay dashboard               # http://localhost:4318 (landing page) · /dashboard (dashboard)
 ```
 
 A read-only page covering every Codex and Claude Code session on this machine, not just Relay runs. It reads `~/.codex/sessions` and `~/.claude/projects`, refreshes every 5 seconds (and pauses while the tab is hidden), and shows:
@@ -142,7 +142,7 @@ test/                    node:test suites (fake providers, fake logs, no tokens 
 npm test                  # all suites; providers are fake executables on PATH
 npm run build:dashboard   # build dashboard/ into dist/dashboard (picked up without restarting)
 npm run dev:dashboard     # live reload at http://127.0.0.1:5173, proxying /api to a running dashboard
-npm run build:site        # landing page (React, GSAP + ScrollTrigger, Lenis, Inter) → served at /welcome
+npm run build:site        # landing page (React, GSAP + ScrollTrigger, Lenis, Inter) → served at / (the dashboard is at /dashboard)
 ```
 
 Changes go through branches and pull requests, with CI on every pull request. See [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -12,7 +12,7 @@ export function Sessions({ sessions, provider, onProvider, now }) {
   const current = Math.min(page, pages - 1);
   const rows = matching.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
   return (
-    <section className="card sessions">
+    <section className="card sessions" id="sessions">
       <div className="chart-head">
         <h2>Sessions</h2>
         <span className="spacer" />
