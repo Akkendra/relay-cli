@@ -40,6 +40,10 @@ export async function runStatusline({ stdin = process.stdin, env = process.env, 
   if (limits) {
     try {
       const file = claudeLimitsPath(env), tmp = `${file}.${randomUUID()}.tmp`;
+      // Claude Code sometimes reports only the 5-hour window; keep the saved weekly one (expired windows drop in usage.mjs).
+      let saved = null;
+      try { saved = JSON.parse(readFileSync(file, 'utf8')); } catch {}
+      limits.primary ??= saved?.primary ?? null; limits.secondary ??= saved?.secondary ?? null;
       mkdirSync(relayConfigDir(env), { recursive: true, mode: 0o700 });
       writeFileSync(tmp, JSON.stringify(limits) + '\n', { mode: 0o600 });
       renameSync(tmp, file);
