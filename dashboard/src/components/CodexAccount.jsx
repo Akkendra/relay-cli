@@ -28,7 +28,6 @@ function rowsFor(range, daily, provider, now = new Date()) {
     return { date, values: { [provider]: byDate.get(date) ?? 0 } };
   });
 }
-const SOURCES = { codex: 'Reported by Codex', claude: 'From Claude Code session logs on this Mac' };
 export function CodexAccount({ account, now, provider = 'codex' }) {
   const [range, setRange] = useState('week');
   if (!account) return provider === 'codex' ? <section className="card account"><h2><Dot provider="codex" />{TITLES.codex}</h2><div className="note">Loading account usage from Codex…</div></section> : null;
@@ -55,13 +54,13 @@ export function CodexAccount({ account, now, provider = 'codex' }) {
         <h2><Dot provider={provider} />{TITLES[provider]}</h2>
         <span className="spacer" />
         <Seg label="Range" options={RANGES} value={range} onChange={setRange} />
-        <span className="note">{provider === 'codex' ? `Reported by Codex ${ago(account.observedAt, now)} · the latest day can lag` : `${SOURCES.claude} · account-wide history isn't exposed by Claude Code`}</span>
+        <span className="note">{provider === 'codex' ? `From Codex, ${ago(account.observedAt, now)}` : 'From session logs'}</span>
       </div>
       <div className="account-body">
         <dl className="kv account-stats">
           {stats.map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v || '—'}</dd></Fragment>)}
         </dl>
-        <DailyChart rows={rows} series={[provider]} height={180} formatLabel={range === 'year' ? monthLabel : undefined} label={`${TITLES[provider]}: tokens per ${range === 'year' ? 'month' : 'day'}`} />
+        <DailyChart rows={rows} series={[provider]} height={140} formatLabel={range === 'year' ? monthLabel : undefined} label={`${TITLES[provider]}: tokens per ${range === 'year' ? 'month' : 'day'}`} />
       </div>
     </section>
   );

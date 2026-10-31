@@ -34,7 +34,7 @@ export function ago(iso, now = Date.now()) {
 }
 export function until(iso, now = Date.now()) {
   const m = Math.round((new Date(iso) - now) / 60000);
-  if (m <= 0) return 'window has reset';
+  if (m <= 0) return 'Window reset';
   const d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60;
   return 'resets in ' + (d ? `${d}d ${h}h` : h ? `${h}h ${mm}m` : `${mm}m`);
 }

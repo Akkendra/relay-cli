@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Dot, Seg } from './components/Seg.jsx';
 import { Limits } from './components/Limits.jsx';
-import { Tiles } from './components/Tiles.jsx';
 import { DailyChart, DailyTable } from './components/DailyChart.jsx';
 import { ModelBars } from './components/ModelBars.jsx';
 import { Sessions } from './components/Sessions.jsx';
-import { RelayTasks } from './components/RelayTasks.jsx';
 import { CodexAccount } from './components/CodexAccount.jsx';
 import { Setup } from './components/Setup.jsx';
 import { Runs } from './components/Runs.jsx';
@@ -16,11 +14,14 @@ import { METRICS, mergeLayout, metricName, metricValue } from './format.js';
 import { usePersisted, useSummary } from './hooks.js';
 
 const SERIES = ['codex', 'claude'];
+// Tokens per day is the main chart; the account charts and models sit under it as a row of smaller tiles.
 const DEFAULT_LAYOUT = [
-  { id: 'agents', size: 's' }, { id: 'limits', size: 'm' }, { id: 'latest', size: 's' }, { id: 'codex', size: 'l' }, { id: 'claude', size: 'l' }, { id: 'today', size: 'l' },
-  { id: 'daily', size: 'm' }, { id: 'models', size: 's' }, { id: 'sessions', size: 'l' }, { id: 'runs', size: 'l' }, { id: 'tasks', size: 'l' }, { id: 'setup', size: 'l' },
+  { id: 'agents', size: 's' }, { id: 'limits', size: 'm' }, { id: 'latest', size: 's' }, { id: 'daily', size: 'l' },
+  { id: 'codex', size: 's' }, { id: 'claude', size: 's' }, { id: 'models', size: 's' }, { id: 'sessions', size: 'l' }, { id: 'runs', size: 'l' }, { id: 'setup', size: 'l' },
 ];
-function readLayout() { try { return mergeLayout(JSON.parse(localStorage.getItem('relay-dash:layout.v1')), DEFAULT_LAYOUT); } catch { return DEFAULT_LAYOUT; } }
+// v2: new default arrangement, applied once even where an older layout was saved.
+const LAYOUT_KEY = 'relay-dash:layout.v2';
+function readLayout() { try { return mergeLayout(JSON.parse(localStorage.getItem(LAYOUT_KEY)), DEFAULT_LAYOUT); } catch { return DEFAULT_LAYOUT; } }
 const RANGES = [{ value: '7', label: '7d' }, { value: '14', label: '14d' }, { value: '30', label: '30d' }];
 const NEXT_THEME = { dark: 'light', light: 'dark' };
 
@@ -39,7 +40,7 @@ export function App() {
   const [range, setRange] = usePersisted('range.v2', '7');
   const [layout, setLayoutState] = useState(readLayout);
   const [editing, setEditing] = useState(false);
-  const setLayout = next => { setLayoutState(next); try { localStorage.setItem('relay-dash:layout.v1', JSON.stringify(next)); } catch {} };
+  const setLayout = next => { setLayoutState(next); try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)); } catch {} };
   const [provider, setProvider] = usePersisted('provider', 'all');
   const [stored, setTheme] = usePersisted('theme', 'dark');
   // The command-center look is the default; light only when chosen (an old 'auto' preference counts as dark).
@@ -57,8 +58,8 @@ export function App() {
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="/">RELAY</a>
-        <nav className="sections" aria-label="Sections"><a href="#w-agents">Overview</a><a href="#w-codex">Usage</a><a href="#sessions">Sessions</a><a href="#runs">Runs</a><a href="#setup">Setup</a></nav>
+        <a className="brand" href="/">Relay</a>
+        <nav className="sections" aria-label="Sections"><a href="#w-agents">Overview</a><a href="#w-daily">Usage</a><a href="#sessions">Sessions</a><a href="#runs">Runs</a><a href="#setup">Setup</a></nav>
         <div className="tools">
           <Clock />
           {editing && <button type="button" onClick={() => setLayout(DEFAULT_LAYOUT)}>Reset layout</button>}
@@ -75,7 +76,6 @@ export function App() {
             limits: { title: 'Plan limits', render: () => <Limits limits={data.limits} now={now} /> },
             codex: { title: 'Codex · all devices', render: () => <CodexAccount account={data.codexAccount} now={now} /> },
             claude: { title: 'Claude · this Mac', render: () => <CodexAccount provider="claude" account={data.claudeAccount} now={now} /> },
-            today: { title: 'Today', render: () => <Tiles data={data} metric={metric} /> },
             daily: { title: 'Tokens per day', render: () => (
               <div className="card">
                 <div className="chart-head">
@@ -92,7 +92,6 @@ export function App() {
             models: { title: 'By model', render: () => <ModelBars models={data.models} metric={metric} /> },
             sessions: { title: 'Sessions', render: () => <Sessions sessions={data.sessions} provider={provider} onProvider={setProvider} now={now} /> },
             runs: { title: 'Runs', render: () => <Runs runs={data.runs} now={now} /> },
-            tasks: { title: 'Relay tasks', render: () => <RelayTasks relay={data.relay} /> },
             setup: { title: 'Setup', render: () => <Setup catalog={data.catalog} /> },
           }} />
           <Footer sources={data.sources} />
