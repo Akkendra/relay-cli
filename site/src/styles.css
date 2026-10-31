@@ -124,3 +124,14 @@ footer { border-top: 1px solid var(--line); margin-top: var(--s6); }
   .rows ol { margin-top: var(--s4); } .rows li { padding-block: var(--s3); }
   footer { margin-top: var(--s4); } .closing { padding-block: var(--s5); } .cols { padding-block: var(--s4); }
 }
+/* Phones: sections stack about 80px apart, and the terminal is only as tall as its lines. */
+@media (max-width: 900px) {
+  .statement, .rows, .install { padding-block: var(--s4); }
+  .play .stick { padding-block: var(--s4); gap: var(--s3); }
+  .term { min-height: 0; font-size: 12.5px; padding: var(--s2); }
+  pre { font-size: 12px; padding: var(--s2); }
+  .steps { margin-top: var(--s3); gap: 12px; }
+  h2 { margin-block: var(--s2); }
+  .paper { margin-top: var(--s3); } .paper .wrap { padding-block: var(--s4); }
+  footer { margin-top: 0; } .closing { padding-block: var(--s4); }
+}
