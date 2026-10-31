@@ -30,7 +30,7 @@ function rowsFor(range, daily, provider, now = new Date()) {
 }
 const SOURCES = { codex: 'Reported by Codex', claude: 'From Claude Code session logs on this Mac' };
 export function CodexAccount({ account, now, provider = 'codex' }) {
-  const [range, setRange] = useState('month');
+  const [range, setRange] = useState('week');
   if (!account) return null;
   if (account.error) {
     return (
