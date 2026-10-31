@@ -54,14 +54,19 @@ export function normalizeAccount(usage, limits, now = new Date()) {
 }
 
 // Never throws: the dashboard keeps working from local logs when Codex is missing, signed out, or offline.
-export async function readCodexAccount({ env = process.env, timeoutMs = 15000, now = () => new Date() } = {}) {
+export async function readCodexAccount({ env = process.env, timeoutMs = 15000, now = () => new Date(), threadIds = [] } = {}) {
   let conn;
   try {
     conn = connect(env, timeoutMs);
     await conn.request('initialize', { clientInfo: { name: 'relay', title: 'Relay', version: '0.1.0' } });
     conn.notify('initialized');
-    const [usage, limits] = await Promise.all([conn.request('account/usage/read'), conn.request('account/rateLimits/read').catch(() => null)]);
-    return normalizeAccount(usage, limits, now());
+    const [usage, limits, ...threads] = await Promise.all([conn.request('account/usage/read'), conn.request('account/rateLimits/read').catch(() => null),
+      ...threadIds.slice(0, 10).map(threadId => conn.request('account/usage/read', { threadId }).catch(() => null))]);
+    const account = normalizeAccount(usage, limits, now());
+    // Codex's own per-thread estimate, in micro-dollars.
+    account.threadCosts = Object.fromEntries(threads.map(t => t?.threadUsage).filter(Boolean)
+      .map(u => [u.threadId, (u.estimatedUsageUsdMicros ?? u.nativeUsageUsdMicros ?? null) === null ? null : (u.estimatedUsageUsdMicros ?? u.nativeUsageUsdMicros) / 1e6]));
+    return account;
   } catch (e) {
     return { error: e.message, observedAt: now().toISOString() };
   } finally {

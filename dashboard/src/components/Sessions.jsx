@@ -24,7 +24,7 @@ export function Sessions({ sessions, provider, onProvider, now }) {
             <thead>
               <tr>
                 <th>Status</th><th>Provider</th><th>Project</th><th>Model</th><th>Last activity</th>
-                <th className="n">Input</th><th className="n">Cache read</th><th className="n">Cache write</th><th className="n">Output</th><th className="n">Total</th>
+                <th className="n">Input</th><th className="n">Cache read</th><th className="n">Cache write</th><th className="n">Output</th><th className="n">Total</th><th className="n" title="List-price estimate from Claude Code or Codex; not your subscription bill">Est. cost</th>
               </tr>
             </thead>
             <tbody>
@@ -40,6 +40,7 @@ export function Sessions({ sessions, provider, onProvider, now }) {
                   <td className="n">{fmt(s.tokens.cacheWrite)}</td>
                   <td className="n">{fmt(s.tokens.output)}</td>
                   <td className="n"><b>{fmt(s.tokens.total)}</b></td>
+                  <td className="n">{s.costUSD == null ? '—' : `$${s.costUSD.toFixed(2)}`}</td>
                 </tr>
               ))}
             </tbody>

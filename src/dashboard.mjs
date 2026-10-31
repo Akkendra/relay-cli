@@ -32,8 +32,9 @@ function staticFile(distDir, pathname) {
 // Read-only and bound to loopback. The Host check stops other web pages from reading the API through DNS rebinding;
 // allowHosts adds explicitly named hosts, such as a Tailscale Serve name that proxies to this loopback port.
 export function startDashboard({ port = 4318, home = homedir(), configDir = relayConfigDir(), now = () => new Date(), allowHosts = [], distDir = defaultDistDir,
-  readAccount = () => readCodexAccount() } = {}) {
-  const account = accountCache({ read: readAccount });
+  readAccount = threadIds => readCodexAccount({ threadIds }) } = {}) {
+  let codexIds = [];
+  const account = accountCache({ read: () => readAccount(codexIds) });
   const catalog = accountCache({ read: async () => readCatalog({ home }) });
   let hosts = new Set();
   const server = createServer((req, res) => {
@@ -42,7 +43,11 @@ export function startDashboard({ port = 4318, home = homedir(), configDir = rela
     const path = new URL(req.url, 'http://localhost').pathname;
     if (path === '/api/summary') {
       let body;
-      try { body = JSON.stringify({ ...summarize({ home, configDir, now: now(), codexAccount: account.get() }), catalog: catalog.get() }); }
+      try {
+        const summary = summarize({ home, configDir, now: now(), codexAccount: account.get() });
+        codexIds = summary.sessions.filter(s => s.provider === 'codex' && s.id).map(s => s.id);
+        body = JSON.stringify({ ...summary, catalog: catalog.get() });
+      }
       catch (e) { res.writeHead(500, { ...headers, 'Content-Type': 'application/json' }).end(JSON.stringify({ error: e.message })); return; }
       res.writeHead(200, { ...headers, 'Content-Type': 'application/json' }).end(body);
       return;

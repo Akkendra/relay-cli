@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, statSync } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import { runStatusline, extractLimits, claudeLimitsPath } from '../src/statusline.mjs';
+import { runStatusline, extractLimits, claudeLimitsPath, claudeCostsPath } from '../src/statusline.mjs';
 import { summarize } from '../src/usage.mjs';
 
 const now = new Date('2026-10-31T03:00:00Z');
@@ -46,4 +46,11 @@ test('windows past their reset time are dropped from the summary', async t => {
   const limits = summarize({ home, now: later }).limits.claude;
   assert.equal(limits.primary, null, 'the 5-hour window reset'); assert.equal(limits.secondary.usedPercent, 17);
   assert.equal(summarize({ home, now: new Date('2026-12-01T00:00:00Z') }).limits.claude, null);
+});
+test('per-session cost from Claude Code is saved by session id and shown on the session', async t => {
+  const { home } = await run(t, JSON.stringify({ ...input, cost: { total_cost_usd: 1.25 } }));
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(claudeCostsPath({ HOME: home }), 'utf8'))), ['abc']);
+  const dir = join(home, '.claude', 'projects', 'p'); (await import('node:fs')).mkdirSync(dir, { recursive: true });
+  (await import('node:fs')).writeFileSync(join(dir, 's.jsonl'), JSON.stringify({ type: 'assistant', sessionId: 'abc', timestamp: now.toISOString(), message: { id: 'm', model: 'claude-x', usage: { input_tokens: 1, output_tokens: 1 } } }) + '\n');
+  assert.equal(summarize({ home, now }).sessions[0].costUSD, 1.25);
 });

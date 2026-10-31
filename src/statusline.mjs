@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { relayConfigDir } from './routing.mjs';
@@ -7,6 +7,7 @@ import { relayConfigDir } from './routing.mjs';
 // windows (the numbers /usage shows) aren't stored anywhere on disk, so Relay saves just those for the
 // dashboard. Nothing else from the input is kept.
 
+export function claudeCostsPath(env = process.env) { return join(relayConfigDir(env), 'claude-costs.json'); }
 export function claudeLimitsPath(env = process.env) { return join(relayConfigDir(env), 'claude-limits.json'); }
 
 export function extractLimits(input, now = new Date()) {
@@ -41,6 +42,19 @@ export async function runStatusline({ stdin = process.stdin, env = process.env, 
       const file = claudeLimitsPath(env), tmp = `${file}.${randomUUID()}.tmp`;
       mkdirSync(relayConfigDir(env), { recursive: true, mode: 0o700 });
       writeFileSync(tmp, JSON.stringify(limits) + '\n', { mode: 0o600 });
+      renameSync(tmp, file);
+    } catch {}
+  }
+  // Per-session cost as Claude Code estimates it (list price), keyed by session id; the newest 500 are kept.
+  if (Number.isFinite(input?.cost?.total_cost_usd) && typeof input.session_id === 'string') {
+    try {
+      let costs = {};
+      try { costs = JSON.parse(readFileSync(claudeCostsPath(env), 'utf8')); } catch {}
+      costs[input.session_id] = { usd: input.cost.total_cost_usd, at: now.toISOString() };
+      const kept = Object.fromEntries(Object.entries(costs).sort((a, b) => (b[1].at > a[1].at ? 1 : -1)).slice(0, 500));
+      const file = claudeCostsPath(env), tmp = `${file}.${randomUUID()}.tmp`;
+      mkdirSync(relayConfigDir(env), { recursive: true, mode: 0o700 });
+      writeFileSync(tmp, JSON.stringify(kept) + '\n', { mode: 0o600 });
       renameSync(tmp, file);
     } catch {}
   }

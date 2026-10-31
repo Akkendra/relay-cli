@@ -185,6 +185,8 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
     const root = s.cwd ? rootOf.get(s.cwd) : null;
     if (root) byRoot.set(root, [...(byRoot.get(root) ?? []), s]);
   }
+  const claudeCosts = readJson(join(configDir, 'claude-costs.json')) ?? {}, codexCosts = codexAccount?.threadCosts ?? {};
+  const costOf = s => (s.provider === 'claude' ? claudeCosts[s.id]?.usd : codexCosts[s.id]) ?? null;
   const latestCodexLimits = sessions.filter(s => s.limits).sort((a, b) => a.limits.observedAt < b.limits.observedAt ? 1 : -1)[0]?.limits ?? null;
   const short = p => p && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   return {
@@ -197,7 +199,7 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
     models: [...models.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     sessions: sessions.sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '')).slice(0, 300).map(s => ({
       provider: s.provider, id: s.id, project: short(s.cwd), relayProject: Boolean(s.cwd && rootOf.get(s.cwd)), models: s.models, startedAt: s.startedAt, lastAt: s.lastAt,
-      live: Boolean(s.lastAt) && now - new Date(s.lastAt) < liveWindowMs, tokens: s.tokens,
+      live: Boolean(s.lastAt) && now - new Date(s.lastAt) < liveWindowMs, tokens: s.tokens, costUSD: costOf(s),
     })),
     relay: [...byRoot.keys()].sort().map(root => ({ ...relayTask(root, byRoot.get(root)), root: short(root) })),
   };

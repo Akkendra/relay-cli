@@ -22,6 +22,7 @@ let buf = '';
 process.stdin.on('data', d => { buf += d; let i; while ((i = buf.indexOf('\\n')) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1);
   if (m.id == null) continue;
   if (mode === 'silent') continue;
+  if (m.method === 'account/usage/read' && m.params?.threadId) { process.stdout.write(JSON.stringify({ id: m.id, result: { threadUsage: { threadId: m.params.threadId, estimatedUsageCreditsMicros: 1, estimatedUsageUsdMicros: 420000, groups: [] } } }) + '\\n'); continue; }
   if (mode === 'signed-out' && m.method === 'account/usage/read') { process.stdout.write(JSON.stringify({ id: m.id, error: { code: -32000, message: 'not logged in' } }) + '\\n'); continue; }
   process.stdout.write(JSON.stringify({ id: m.id, result: results[m.method] ?? {} }) + '\\n'); } });
 `, { mode: 0o755 });
@@ -58,4 +59,8 @@ test('the cache asks Codex at most once per interval and never makes a poll wait
   assert.equal(calls, 1); assert.deepEqual(cache.get(), { n: 1 });
   clock += 60000; cache.get(); await cache.refresh();
   assert.equal(calls, 2);
+});
+test('Codex per-thread cost estimates are read for the given threads', async t => {
+  const account = await readCodexAccount({ env: fakeCodex(t), threadIds: ['t1'] });
+  assert.deepEqual(account.threadCosts, { t1: 0.42 });
 });
