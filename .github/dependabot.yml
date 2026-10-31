@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Wait two weeks before proposing a new release, so a compromised version has time to be caught.
+    cooldown:
+      default-days: 14
+    groups:
+      dashboard-build:
+        patterns: ["react", "react-dom", "vite", "@vitejs/*"]

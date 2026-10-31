@@ -127,6 +127,8 @@ npm run build:dashboard   # build dashboard/ into dist/dashboard (picked up with
 npm run dev:dashboard     # live reload at http://127.0.0.1:5173, proxying /api to a running dashboard
 ```
 
+Changes go through branches and pull requests, with CI on every pull request. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 React and Vite are pinned dev dependencies used only for the build. `dist/` is gitignored, so rebuild after cloning.
 
 The a proxy project project was a reference for ideas only. Its approach (an `ANTHROPIC_BASE_URL` override that rewrites requests) conflicts with Relay's environment checks, and that repository states no license, so no code was copied.
