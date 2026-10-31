@@ -93,3 +93,5 @@ footer { color: var(--muted); font-size: 12px; margin-top: 20px; display: grid; 
 @media (max-width: 820px) { .account-body { grid-template-columns: 1fr; } }
 .account-stats dd { font-weight: 600; font-variant-numeric: tabular-nums; }
 .card .status + .note { margin-left: 8px; }
+.pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; color: var(--ink-2); font-size: 13px; }
+.pager button:disabled { opacity: 0.4; cursor: default; }
