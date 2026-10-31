@@ -1,17 +1,34 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+
+const ROW = 4, GAP = 14;
 import { SIZES, mergeLayout, moveTo } from '../format.js';
 
 // Tiles that can be dragged into place, nudged with arrows, and sized S / M / L while editing.
 export function Board({ layout, setLayout, editing, widgets }) {
   const [dragging, setDragging] = useState(null);
+  // Masonry packing: each tile spans as many 4px rows as its content needs, and dense flow lets smaller tiles fill gaps.
+  const ref = useRef(null);
+  const [spans, setSpans] = useState({});
+  useLayoutEffect(() => {
+    const measure = () => {
+      const next = {};
+      for (const el of ref.current?.querySelectorAll(':scope > .widget') ?? []) next[el.id] = Math.ceil((el.firstElementChild.getBoundingClientRect().height + (el.children[1]?.getBoundingClientRect().height ?? 0) + GAP) / ROW);
+      setSpans(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    };
+    let frame;
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); });
+    for (const el of ref.current?.querySelectorAll(':scope > .widget > *') ?? []) ro.observe(el);
+    measure();
+    return () => { cancelAnimationFrame(frame); ro.disconnect(); };
+  });
   const update = next => setLayout(next);
   return (
-    <div className={`board${editing ? ' editing' : ''}`}>
+    <div ref={ref} className={`board${editing ? ' editing' : ''}`}>
       {layout.map((w, i) => {
         const widget = widgets[w.id];
         if (!widget) return null;
         return (
-          <div key={w.id} id={`w-${w.id}`} className={`widget w-${w.size}${dragging === w.id ? ' dragging' : ''}`} draggable={editing}
+          <div key={w.id} id={`w-${w.id}`} className={`widget w-${w.size}${dragging === w.id ? ' dragging' : ''}`} draggable={editing} style={spans[`w-${w.id}`] ? { gridRowEnd: `span ${spans[`w-${w.id}`]}` } : undefined}
             onDragStart={e => { setDragging(w.id); e.dataTransfer.effectAllowed = 'move'; }}
             onDragEnd={() => setDragging(null)}
             onDragOver={e => { if (editing && dragging) e.preventDefault(); }}

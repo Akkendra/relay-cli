@@ -10,13 +10,14 @@ import { CodexAccount } from './components/CodexAccount.jsx';
 import { Setup } from './components/Setup.jsx';
 import { Runs } from './components/Runs.jsx';
 import { Board } from './components/Board.jsx';
+import { LatestRun } from './components/LatestRun.jsx';
 import { Clock, Core } from './components/Hud.jsx';
 import { METRICS, mergeLayout, metricName, metricValue } from './format.js';
 import { usePersisted, useSummary } from './hooks.js';
 
 const SERIES = ['codex', 'claude'];
 const DEFAULT_LAYOUT = [
-  { id: 'agents', size: 's' }, { id: 'limits', size: 'm' }, { id: 'codex', size: 'l' }, { id: 'claude', size: 'l' }, { id: 'today', size: 'l' },
+  { id: 'agents', size: 's' }, { id: 'limits', size: 'm' }, { id: 'latest', size: 's' }, { id: 'codex', size: 'l' }, { id: 'claude', size: 'l' }, { id: 'today', size: 'l' },
   { id: 'daily', size: 'm' }, { id: 'models', size: 's' }, { id: 'sessions', size: 'l' }, { id: 'runs', size: 'l' }, { id: 'tasks', size: 'l' }, { id: 'setup', size: 'l' },
 ];
 function readLayout() { try { return mergeLayout(JSON.parse(localStorage.getItem('relay-dash:layout.v1')), DEFAULT_LAYOUT); } catch { return DEFAULT_LAYOUT; } }
@@ -73,6 +74,7 @@ export function App() {
         <>
           <Board layout={layout} setLayout={setLayout} editing={editing} widgets={{
             agents: { title: 'Agents', render: () => <Core sessions={data.sessions} today={data.daily.at(-1)} now={now} /> },
+            latest: { title: 'Latest run', render: () => <LatestRun runs={data.runs} now={now} /> },
             limits: { title: 'Plan limits', render: () => <Limits limits={data.limits} now={now} /> },
             codex: { title: 'Codex · all devices', render: () => <CodexAccount account={data.codexAccount} now={now} /> },
             claude: { title: 'Claude · this Mac', render: () => <CodexAccount provider="claude" account={data.claudeAccount} now={now} /> },
