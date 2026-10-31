@@ -21,6 +21,7 @@ While a task has changes, a new line asks whether it follows up on that task or 
   /models              which models each tier uses (~/.config/relay/models.json)
   /continue <text>     follow up on the current task in the same Codex session
   /run                 start the app (dev/start script, or index.html)
+  /resume              test, review, and fix the current changes without a new build
   /ask <question>      answer a question read-only (also automatic for lines ending in ? or starting with where/what/why/how…)
   /task <text>         run the line as a task even if it reads like a question
   /interactive <task>  run a task in Codex's own window, with its approval prompts
@@ -49,7 +50,7 @@ async function findProject(cwd, deps) {
   return projectRoot(cwd);
 }
 
-const COMMANDS = ['/ask', '/continue', '/diff', '/help', '/history', '/interactive', '/models', '/quit', '/review', '/run', '/status', '/task', '/undo', '/verbose'];
+const COMMANDS = ['/ask', '/continue', '/diff', '/help', '/history', '/interactive', '/models', '/quit', '/resume', '/review', '/run', '/status', '/task', '/undo', '/verbose'];
 export const complete = line => [line.startsWith('/') ? COMMANDS.filter(c => c.startsWith(line)) : [], line];
 // Up-arrow history, kept per project in .relay (which git ignores).
 function promptHistory(root) {
@@ -117,6 +118,9 @@ export async function repl(cwd, deps) {
         if (!rest.length) console.log('Usage: /continue <what to change>');
         else if (!t?.routing?.build) console.log('No task to continue yet. Type a task first.');
         else await continueTask(root, rest.join(' '), deps);
+      } else if (command === '/resume') {
+        requireSubscriptionEnvironment(deps.env);
+        await locked(root, () => runAll(root, readState(root), deps, { resume: true }));
       } else if (command === '/run') {
         await launchApp(root, { ...deps, allowCode: async () => deps.confirm(`Run this project's dev/start script in ${root}? [y/N] `) });
       } else if (command === '/ask' || command === '/task') {

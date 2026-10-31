@@ -51,10 +51,12 @@ test('review captures staged, unstaged, and untracked changes without staging', 
   const saved = JSON.parse(readFileSync(join(root, '.relay', 'state.json'), 'utf8'));
   assert.equal(saved.task.id, next.id); assert.deepEqual(saved.history.map(h => h.id), [task.id], 'the earlier task moves to history');
 });
-test('large review is rejected instead of silently losing changes', t => {
+test('a diff over 100 KB is not inlined: the reviewer gets the file list, and the hash still covers it all', t => {
   const { root } = fixture(t); const task = createTask(root, 'large change');
   writeFileSync(join(root, 'app.txt'), 'x'.repeat(100001));
-  assert.throws(() => reviewPacket(root, task), /100 KB/);
+  const packet = reviewPacket(root, task);
+  assert.match(packet.prompt, /DIFF\n\(Not included: 100 KB is over[\s\S]*Read every changed file[\s\S]*\napp\.txt$/);
+  assert.doesNotMatch(packet.prompt, /x{1000}/); assert.match(packet.diff, /x{1000}/, 'the secret scan and quote check still see the whole diff');
 });
 test('provider arguments preserve approval path and remove reviewer tools', () => {
   const args = buildArgs({ goal: 'literal $(do-not-execute)' });
@@ -271,6 +273,15 @@ test('a PDF build is large: Codex leads subagents and is told to use its skills'
   await h.run();
   assert.equal(h.state().routing.build.tier, 'large');
   assert.match(h.read('codex-prompt-1.txt'), /act as the lead agent[\s\S]*spawn one subagent per part[\s\S]*Use your installed skills and plugins/);
+});
+test('relay review picks the loop up on the current changes without a new build', async t => {
+  const h = runHarness(t);
+  await assert.rejects(main(['review'], h.root, h.deps), /has not been built yet/);
+  await h.run();
+  await main(['review'], h.root, { ...h.deps, env: { ...h.deps.env, FAKE_CLAUDE_FINDINGS: '2' } });
+  assert.equal(JSON.parse(h.read('npm-count')), 3, 'tests ran again'); assert.ok(!h.logged('codex-3.json'), 'only one fix round, no new build');
+  assert.deepEqual(JSON.parse(h.read('codex-2.json')).slice(0, 2), ['exec', 'resume']);
+  assert.equal(h.state().status, 'done');
 });
 test('cancelling the build plan starts nothing', async t => {
   const h = runHarness(t, { choices: ['q'] });

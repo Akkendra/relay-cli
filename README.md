@@ -48,7 +48,7 @@ relay> Create formatDuration(minutes). Acceptance: 0 -> '0m', 65 -> '1h 5m'; rej
 | `relay init` | Creates `.relay/` in the current git repo and excludes it locally through `.git/info/exclude`. |
 | `relay task "<goal and acceptance criteria>"` | Records a task. Its baseline is a snapshot of the current files, so the tree needn't be clean; the earlier task moves to history. |
 | `relay build` | Builds the current task in Codex's own window (`--sandbox workspace-write --ask-for-approval on-request`). |
-| `relay review` | Sends the diff to Claude for an advisory review. |
+| `relay review` | Tests, reviews, and fixes the current changes without a new build (`/resume` at the prompt). |
 | `relay run` | Same flow as typing the task at the prompt, for the current task. |
 | `relay status` | Prints `.relay/state.json`. |
 | `relay dashboard [--port N] [--allow-host NAME]` | Starts the local server: landing page at `http://localhost:4318`, read-only dashboard at `/dashboard`. |
