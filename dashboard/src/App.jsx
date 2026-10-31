@@ -56,8 +56,8 @@ export function App() {
       {data && (
         <>
           <section className="hero"><Core live={data.sessions.filter(s => s.live).length} /><Limits limits={data.limits} now={now} /></section>
-          <CodexAccount account={data.codexAccount} dates={days.map(d => d.date)} now={now} />
-          <CodexAccount provider="claude" account={data.claudeAccount} dates={days.map(d => d.date)} now={now} />
+          <CodexAccount account={data.codexAccount} now={now} />
+          <CodexAccount provider="claude" account={data.claudeAccount} now={now} />
           <Tiles data={data} metric={metric} />
           <section className="grid two">
             <div className="card">

@@ -7,7 +7,7 @@ const L = 44, R = 8, T = 10, B = 26;
 
 // Stacked columns, one segment per series (bottom to top), with a 2px surface gap, rounded data-ends, and a
 // hover tooltip per day. rows: [{ date, values: { [series]: number } }].
-export function DailyChart({ rows, series, label, height = 240 }) {
+export function DailyChart({ rows, series, label, height = 240, formatLabel = dayLabel }) {
   const [ref, measured] = useWidth();
   const [hover, setHover] = useState(null);
   const tipRef = useRef(null);
@@ -53,7 +53,7 @@ export function DailyChart({ rows, series, label, height = 240 }) {
                     ? <path key={s} d={topRounded(x, yTop, bw, Math.max(0, h - gap), 4)} fill={`var(--${s})`} pointerEvents="none" />
                     : <rect key={s} x={x} y={yTop} width={bw} height={Math.max(0, h - gap)} fill={`var(--${s})`} pointerEvents="none" />;
                 })}
-                {(rows.length - 1 - i) % every === 0 && <text x={cx} y={H - 8} textAnchor="middle">{dayLabel(r.date)}</text>}
+                {(rows.length - 1 - i) % every === 0 && <text x={cx} y={H - 8} textAnchor="middle">{formatLabel(r.date)}</text>}
               </g>
             );
           })}
@@ -61,7 +61,7 @@ export function DailyChart({ rows, series, label, height = 240 }) {
       )}
       {hover !== null && (
         <div className="tip" ref={tipRef} style={{ left: tipLeft, top: 0 }}>
-          <b>{dayLabel(rows[hover].date)}</b>
+          <b>{formatLabel(rows[hover].date)}</b>
           {series.map(s => <div key={s}><Dot provider={s} />{providerName(s)}<span className="num">{full(rows[hover].values[s] ?? 0)}</span></div>)}
           {series.length > 1 && <div className="muted">Total<span className="num">{full(totals[hover])}</span></div>}
         </div>
