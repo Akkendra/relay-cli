@@ -531,6 +531,19 @@ export async function runAll(root, state, deps, { mode = 'exec', followUp } = {}
   checkpoint(root, state, 'done', { status: task.status });
   console.log(`Done: ${task.status}. Changes are left uncommitted for you (git diff to inspect).`);
 }
+// Flags Relay depends on, checked against each CLI's --help, so an update that renames one is caught before a run.
+const REQUIRED_FLAGS = [
+  ['codex', ['exec', '--help'], ['--json', '--sandbox', '--model', '--config']],
+  ['codex', ['exec', 'resume', '--help'], ['--json', '--model', '--config']],
+  ['claude', ['--help'], ['--safe-mode', '--strict-mcp-config', '--mcp-config', '--tools', '--disallowedTools', '--output-format', '--model', '--effort']],
+];
+export function checkFlags(env) {
+  return REQUIRED_FLAGS.map(([cli, args, flags]) => {
+    const r = spawnSync(cli, args, { env, encoding: 'utf8', timeout: 10000 });
+    const help = r.status === 0 ? r.stdout + r.stderr : null;
+    return { command: `${cli} ${args.slice(0, -1).join(' ')}`.trim(), missing: help === null ? null : flags.filter(f => !help.includes(f)) };
+  });
+}
 export async function main(args, cwd = process.cwd(), overrides = {}) {
   // Overrides exist so tests can supply fake provider processes and answers; the CLI uses the defaults.
   const deps = { env: process.env, home: homedir(), isTTY: process.stdin.isTTY, confirm: ask, choose: answer, output: process.stdout, testTimeout: 600000,
@@ -543,6 +556,11 @@ export async function main(args, cwd = process.cwd(), overrides = {}) {
     for (const name of ['git', 'codex', 'claude']) {
       const r = spawnSync(name, ['--version'], { encoding: 'utf8', timeout: 10000 });
       console.log(`${name}: ${r.status === 0 ? r.stdout.trim() : 'not available'}`);
+    }
+    for (const c of checkFlags(deps.env)) {
+      const ok = c.missing?.length === 0;
+      if (!ok) process.exitCode = 1;
+      console.log(`${ok ? '✔' : '✖'} ${c.command} flags: ${c.missing === null ? 'could not read --help' : ok ? 'all present' : `missing ${c.missing.join(', ')}`}`);
     }
     console.log('Authentication is not verified. Check codex login status and claude auth status locally.');
     return;
