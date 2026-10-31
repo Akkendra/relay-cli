@@ -119,19 +119,19 @@ export function App() {
             <h2>Two signed-in CLIs and Node 22.</h2>
             <p className="lede">Relay uses the Codex and Claude Code CLIs you already sign in to with your subscriptions. No API keys.</p>
           </div>
-          <pre><span className="c"># once</span>{'\n'}git clone https://github.com/Akkendra/relay-cli{'\n'}cd relay-cli && npm install{'\n'}npm run build:dashboard && npm link{'\n\n'}<span className="c"># in any project</span>{'\n'}relay{'\n'}relay dashboard   <span className="c"># http://localhost:4318/dashboard</span></pre>
+          <pre><span className="c"># once</span>{'\n'}git clone https://github.com/aannavarapu/relay-cli{'\n'}cd relay-cli && npm install{'\n'}npm run build:dashboard && npm link{'\n\n'}<span className="c"># in any project</span>{'\n'}relay{'\n'}relay dashboard   <span className="c"># http://localhost:4318/dashboard</span></pre>
         </section>
       </main>
       <footer>
         <div className="wrap">
           <div className="closing">
             <h2>Start with one task.</h2>
-            <div className="cta"><a className="pill solid" href="#install">Get started</a><a className="pill" href="https://github.com/Akkendra/relay-cli">View on GitHub</a></div>
+            <div className="cta"><a className="pill solid" href="#install">Get started</a><a className="pill" href="https://github.com/aannavarapu/relay-cli">View on GitHub</a></div>
           </div>
           <div className="cols">
             <div><span className="brand">RELAY</span><p>Codex builds. Claude reviews. You decide.</p></div>
             <div><h4>Product</h4><a href="#how">How it works</a><a href="/dashboard/">Dashboard</a><a href="#install">Install</a></div>
-            <div><h4>Project</h4><a href="https://github.com/Akkendra/relay-cli">GitHub</a><a href="https://github.com/Akkendra/relay-cli/blob/main/README.md">Docs</a><a href="https://github.com/Akkendra/relay-cli/blob/main/LICENSE">License</a></div>
+            <div><h4>Project</h4><a href="https://github.com/aannavarapu/relay-cli">GitHub</a><a href="https://github.com/aannavarapu/relay-cli/blob/main/README.md">Docs</a><a href="https://github.com/aannavarapu/relay-cli/blob/main/LICENSE">License</a></div>
           </div>
           <div className="legal"><span>MIT licensed</span><span>Runs on your machine · no API keys</span></div>
         </div>
