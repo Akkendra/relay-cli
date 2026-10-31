@@ -102,9 +102,17 @@ A read-only page covering every Codex and Claude Code session on this machine, n
 **What it doesn't do:**
 
 - It reads only counts and metadata, never prompts or code.
-- It doesn't guess Claude's plan limits; Claude Code doesn't write them to local logs.
+- It never guesses plan limits: Codex's come from its session logs, and Claude's from `relay statusline` (see below).
 - The review cost shown is Claude's list-price estimate, not your subscription bill.
 - Both log formats are undocumented, so unreadable lines are counted in the footer rather than guessed at.
+
+**Claude plan limits.** Claude Code doesn't save its 5-hour and weekly usage to disk, but it passes them to the status line command after each response (Pro, Max, and Ultra plans). Register Relay as the status line in `~/.claude/settings.json`:
+
+```json
+{ "statusLine": { "type": "command", "command": "/absolute/path/to/node /path/to/relay/bin/relay.mjs statusline" } }
+```
+
+It prints a short line, such as `Opus 5.5 · 59% session · 38% week`. It saves only those two windows and their reset times to `~/.config/relay/claude-limits.json`, never the session's paths, prompts, or IDs. The dashboard then shows Claude bars next to the Codex ones. They update only while Claude Code is running, and a window that has passed its reset time is dropped rather than shown out of date.
 
 **From your phone (Tailscale).** Keep the server on loopback and let Tailscale Serve share it with your own devices only. Use `serve`, never `funnel`; Funnel publishes to the whole internet.
 

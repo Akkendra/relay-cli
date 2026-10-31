@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { startDashboard } from './dashboard.mjs';
 import { DEFAULT_MODELS, loadModels, planBuild, planReview, shiftTier, diffStats } from './routing.mjs';
 import { findCodexSession } from './usage.mjs';
+import { runStatusline } from './statusline.mjs';
 
 function git(cwd, args, env) {
   const r = spawnSync('git', args, { cwd, env, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
@@ -278,9 +279,10 @@ export async function main(args, cwd = process.cwd(), overrides = {}) {
     return;
   }
   if (command === 'help' || command === '--help') {
-    console.log('Relay prototype: doctor | init | task "goal and acceptance criteria" | build | review | run | status | dashboard [--port N] [--allow-host NAME]');
+    console.log('Relay prototype: doctor | init | task "goal and acceptance criteria" | build | review | run | status | dashboard [--port N] [--allow-host NAME] | statusline');
     return;
   }
+  if (command === 'statusline') { await runStatusline(); return; }
   if (command === 'dashboard') {
     const usage = 'Usage: relay dashboard [--port 1-65535] [--allow-host name.example.ts.net]';
     let values;

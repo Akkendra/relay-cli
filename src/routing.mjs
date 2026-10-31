@@ -24,9 +24,8 @@ export const DEFAULT_MODELS = {
 const EFFORTS = { codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], claude: ['low', 'medium', 'high', 'xhigh', 'max'] };
 const MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 
-export function configPath(env = process.env) {
-  return join(env.XDG_CONFIG_HOME || join(env.HOME || homedir(), '.config'), 'relay', 'models.json');
-}
+export function relayConfigDir(env = process.env) { return join(env.XDG_CONFIG_HOME || join(env.HOME || homedir(), '.config'), 'relay'); }
+export function configPath(env = process.env) { return join(relayConfigDir(env), 'models.json'); }
 // Model names change as providers ship new ones, so they can be overridden without a code change.
 export function loadModels(env = process.env) {
   let custom = {};

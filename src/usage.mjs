@@ -140,7 +140,16 @@ function relayTask(root, sessions) {
   };
 }
 
-export function summarize({ home, now = new Date(), days = 30, liveWindowMs = 120000 }) {
+// Claude plan limits come from `relay statusline` (see statusline.mjs); windows past their reset time are dropped.
+function claudeLimits(configDir, now) {
+  const saved = readJson(join(configDir, 'claude-limits.json'));
+  if (!saved?.observedAt) return null;
+  const live = w => w && Number.isFinite(w.usedPercent) && (!w.resetsAt || new Date(w.resetsAt) > now) ? w : null;
+  const limits = { observedAt: saved.observedAt, planType: null, primary: live(saved.primary), secondary: live(saved.secondary) };
+  return limits.primary || limits.secondary ? limits : null;
+}
+
+export function summarize({ home, configDir = join(home, '.config', 'relay'), now = new Date(), days = 30, liveWindowMs = 120000 }) {
   const sources = {
     codex: { dir: join(home, '.codex', 'sessions'), parse: parseCodexSession },
     claude: { dir: join(home, '.claude', 'projects'), parse: parseClaudeSession },
@@ -179,7 +188,7 @@ export function summarize({ home, now = new Date(), days = 30, liveWindowMs = 12
   return {
     generatedAt: now.toISOString(),
     sources: Object.fromEntries(Object.entries(sourceInfo).map(([k, v]) => [k, { ...v, dir: short(v.dir) }])),
-    limits: { codex: latestCodexLimits },
+    limits: { codex: latestCodexLimits, claude: claudeLimits(configDir, now) },
     daily,
     models: [...models.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     sessions: sessions.sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '')).slice(0, 300).map(s => ({
