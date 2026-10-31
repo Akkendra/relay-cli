@@ -43,10 +43,10 @@ function Task({ task }) {
 
 export function RelayTasks({ relay }) {
   return (
-    <section>
-      <h2 className="section-title">Relay tasks</h2>
+    <section className="card">
+      <h2>Relay tasks</h2>
       <div className="grid tasks">
-        {relay.length ? relay.map(t => <Task key={t.root} task={t} />) : <div className="empty card">No Relay projects found in session history.</div>}
+        {relay.length ? relay.map(t => <Task key={t.root} task={t} />) : <div className="empty">No Relay projects found in session history.</div>}
       </div>
     </section>
   );

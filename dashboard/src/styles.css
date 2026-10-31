@@ -165,7 +165,8 @@ tr.detail td { white-space: normal; background: var(--wash); }
 .stages i.done { background: var(--good); } .stages i.failed { background: var(--critical); }
 /* Editable board: a 12-column grid; S = 4, M = 8, L = 12 columns. */
 .board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 14px; grid-auto-rows: 4px; grid-auto-flow: row dense; align-items: start; }
-.widget { min-width: 0; position: relative; }
+.widget { min-width: 0; position: relative; display: flex; flex-direction: column; align-self: stretch; padding-bottom: 14px; }
+.widget > :last-child { flex: 1 0 auto; } .board.measuring .widget { align-self: start; }
 .widget.w-s { grid-column: span 4; } .widget.w-m { grid-column: span 8; } .widget.w-l { grid-column: span 12; }
 .widget > *, .widget > section, .widget .grid, .widget .card { margin-bottom: 0; }
 .widget > .grid.limits, .widget > .grid.tiles, .widget > section > .grid { margin-bottom: 0; }
