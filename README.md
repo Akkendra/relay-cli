@@ -29,45 +29,41 @@ npm test
 node bin/relay.mjs doctor
 ```
 
-Use `node /path/to/relay/bin/relay.mjs` wherever this README says `relay`. Alternatively, run `npm link` to register a global `relay` command; that changes your global npm setup, so it's opt-in.
+Run `npm link` once to get a global `relay` command. That changes your global npm setup, so it's opt-in; otherwise use `node /path/to/relay/bin/relay.mjs`.
 
 Keep Relay separate from the project it works on. Try it on a throwaway repo first:
 
 ```bash
 mkdir relay-demo && cd relay-demo
-git init && echo '# Relay demo' > README.md && git add README.md && git commit -m "Initial demo"
-relay init
-relay task "Create formatDuration(minutes). Acceptance: 0 -> '0m', 65 -> '1h 5m'; reject negative input; include tests."
-relay run
+relay            # offers to set up local git, then opens the prompt
+relay> Create formatDuration(minutes). Acceptance: 0 -> '0m', 65 -> '1h 5m'; reject negative input; include tests.
 ```
 
 ## Commands
 
 | Command | What it does |
 |---|---|
+| `relay` | Opens the interactive prompt. Each line you type is a task; `/help` lists `/status`, `/history`, `/models`, `/interactive <task>`, and `/quit`. |
 | `relay doctor` | Shows the Node, git, `codex`, and `claude` versions. It doesn't check sign-in. |
 | `relay init` | Creates `.relay/` in the current git repo and excludes it locally through `.git/info/exclude`. |
-| `relay task "<goal and acceptance criteria>"` | Records the task and its baseline commit. The working tree must be clean, with no untracked files. One task per project. |
-| `relay build` | Opens interactive Codex with `--sandbox workspace-write --ask-for-approval on-request`. |
+| `relay task "<goal and acceptance criteria>"` | Records a task. Its baseline is a snapshot of the current files, so the tree needn't be clean; the earlier task moves to history. |
+| `relay build` | Builds the current task in Codex's own window (`--sandbox workspace-write --ask-for-approval on-request`). |
 | `relay review` | Sends the diff to Claude for an advisory review. |
-| `relay run` | Runs build, then tests (only if you agree), then review, saving a checkpoint after each step. |
+| `relay run` | Same flow as typing the task at the prompt, for the current task. |
 | `relay status` | Prints `.relay/state.json`. |
 | `relay dashboard [--port N] [--allow-host NAME]` | Starts the read-only usage dashboard (default `http://localhost:4318`). |
 
-## How `relay run` works
+## How a task runs
 
-1. **Build.** Codex opens interactively. Relay continues once you exit, and an exit code of 0 is not taken as proof of anything.
-2. **Fingerprint.** Relay records a SHA-256 of the diff. Codex can keep a detached task running after the CLI exits ("Any running work continues"). If the diff changes before the tests, during them, or before the review, the run stops with `changed_during_run`. Stop any detached task (`codex agents`) before continuing.
-3. **Tests, with consent.** If `package.json` has a `test` script, Relay asks `Run "npm test"? [y/N]`. The default is no, and no flag or environment variable can answer for you.
-   - If the tests fail, the run stops with `tests_failed`. The bounded output, exit code, Node version, and diff hash are saved to `.relay/test-failure.json`, and Claude is not called.
-4. **Review.** Claude receives:
-   - the task;
-   - the Node version;
-   - the test evidence: the first 4 KB and last 12 KB of output, with any omission labelled, plus the SHA-256 of the tested diff, which Relay has verified matches the reviewed one;
-   - the full diff, including new untracked files.
-5. **Result.** The best possible status is `needs_human_decision`. Relay never infers approval, and it never commits, pushes, or deploys.
+1. **Plan.** Relay shows the model it picked (see [Model routing](#model-routing)). Press Enter to run it, `b` for a bigger model, `s` for a smaller one, or `q` to cancel.
+2. **Build.** Codex runs non-interactively (`codex exec`) and finishes on its own, streaming the commands it runs, the files it edits, and its messages. It stays in the workspace-write sandbox with no network, and with `approval_policy="never"` anything outside the sandbox is refused, never auto-approved. Use `/interactive <task>` or `relay build` when you want Codex's own window and approval prompts.
+3. **Tests, with consent.** If `package.json` has a `test` script, Relay asks `Run "npm test"? [y/N]` every time. The default is no.
+4. **Review.** Claude, with no tools, reviews the task's diff, the Node version, and bounded test output. The packet records the SHA-256 of the tested diff, which Relay has verified matches the reviewed one.
+5. **Fix, without leaving.** Type `f` to send the review findings (or failing test output) back to the **same Codex session**, or type your own instructions. Relay then tests and reviews again, as often as you like. Press Enter when you're done.
 
-Every step is recorded in `task.run.steps`. An interrupted run doesn't resume automatically. Finish it with `relay review`, or start again with `relay run`.
+**Baselines.** Each task's starting point is a snapshot of the folder: a git tree written through a temporary index. Nothing is committed and your index isn't touched. Tasks run back to back in one folder, and each is reviewed on its own changes only.
+
+**Safety checks.** If files change between the build and the review, the run stops with `changed_during_run`. Failed tests are saved to `.relay/test-failure.json` and the task is never marked done. The best status is `needs_human_decision`: Relay never infers approval and never commits, pushes, or deploys. Every step is checkpointed in `task.run.steps`.
 
 ## Model routing
 

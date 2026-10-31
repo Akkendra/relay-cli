@@ -49,6 +49,7 @@ function record(s, at, model, t) {
 
 // Codex totals are cumulative per session; each token_count event contributes its delta at its own timestamp.
 // OpenAI counts cached tokens inside input_tokens, so uncached input is input - cached.
+export function codexUsageTokens(u) { return codexTokens(u); }
 function codexTokens(u) {
   const cached = n(u.cached_input_tokens);
   return tokens(Math.max(0, n(u.input_tokens) - cached), cached, n(u.cache_write_input_tokens), n(u.output_tokens), n(u.reasoning_output_tokens));

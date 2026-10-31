@@ -24,9 +24,15 @@ test('nested paths identify same project and initialization preserves identity',
   assert.equal(projectRoot(join(root, 'src')), root);
   assert.equal(initialize(root).projectId, initialize(root).projectId);
 });
-test('dirty initial tree cannot be attributed to a new task', t => {
-  const { root } = fixture(t); writeFileSync(join(root, 'app.txt'), 'existing user edit');
-  assert.throws(() => createTask(root, 'feature'), /clean committed/);
+test('a task starts from a snapshot, so earlier uncommitted work is not attributed to it', t => {
+  const { root, git } = fixture(t);
+  writeFileSync(join(root, 'app.txt'), 'existing user edit\n'); writeFileSync(join(root, 'draft.txt'), 'untracked draft\n');
+  const task = createTask(root, 'feature');
+  assert.equal(git('status', '--porcelain').toString(), ' M app.txt\n?? draft.txt\n', 'the snapshot changes nothing in the working tree or index');
+  assert.throws(() => reviewPacket(root, task), /No changes to review/);
+  writeFileSync(join(root, 'app.txt'), 'existing user edit\ntask change\n');
+  const packet = reviewPacket(root, task);
+  assert.match(packet.prompt, /\+task change/); assert.doesNotMatch(packet.prompt, /untracked draft|^\+existing user edit/m);
 });
 test('review captures staged, unstaged, and untracked changes without staging', t => {
   const { root, git } = fixture(t); const task = createTask(root, 'Add feature; test it');
@@ -41,7 +47,9 @@ test('review captures staged, unstaged, and untracked changes without staging', 
   assert.equal(git('diff', '--cached', '--name-only').toString(), 'staged.txt\n');
   writeFileSync(join(root, 'app.txt'), 'changed again');
   assert.notEqual(reviewPacket(root, task).hash, first.hash);
-  assert.throws(() => createTask(root, 'another task'), /One task/);
+  const next = createTask(root, 'another task');
+  const saved = JSON.parse(readFileSync(join(root, '.relay', 'state.json'), 'utf8'));
+  assert.equal(saved.task.id, next.id); assert.deepEqual(saved.history.map(h => h.id), [task.id], 'the earlier task moves to history');
 });
 test('large review is rejected instead of silently losing changes', t => {
   const { root } = fixture(t); const task = createTask(root, 'large change');
@@ -58,16 +66,35 @@ test('provider arguments preserve approval path and remove reviewer tools', () =
 
 // Fake provider executables placed first on PATH; they log what they received and spend no tokens.
 const fakes = {
-  codex: `fs.writeFileSync(log('codex.json'), JSON.stringify(process.argv.slice(2)));
-const now = new Date().toISOString(), sessions = require('path').join(process.env.HOME, '.codex', 'sessions');
-fs.mkdirSync(sessions, { recursive: true });
-fs.writeFileSync(require('path').join(sessions, 'rollout-fake.jsonl'), [
-  { timestamp: now, type: 'session_meta', payload: { id: 'codex-fake', cwd: process.cwd(), timestamp: now } },
-  { timestamp: now, type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 900, cached_input_tokens: 600, output_tokens: 40 } } } },
-].map(JSON.stringify).join('\\n'));
-fs.mkdirSync('src', { recursive: true }); fs.writeFileSync('src/feature.js', 'export const feature = 1;\\n');
+  codex: `const args = process.argv.slice(2);
+const n = (fs.existsSync(log('codex-count')) ? Number(fs.readFileSync(log('codex-count'), 'utf8')) : 0) + 1;
+fs.writeFileSync(log('codex-count'), String(n));
+fs.writeFileSync(log('codex.json'), JSON.stringify(args)); fs.writeFileSync(log('codex-' + n + '.json'), JSON.stringify(args));
+const file = 'src/feature' + (n === 1 ? '' : '-' + n) + '.js';
+fs.mkdirSync('src', { recursive: true });
+if (args[0] === 'exec') {
+  fs.writeFileSync(log('codex-prompt-' + n + '.txt'), fs.readFileSync(0, 'utf8'));
+  const out = e => process.stdout.write(JSON.stringify(e) + '\\n');
+  out({ type: 'thread.started', thread_id: args[1] === 'resume' ? args.at(-2) : 'thread-fake' });
+  out({ type: 'item.started', item: { type: 'command_execution', command: 'npm test' } });
+  fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
+  out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: file, kind: 'add' }] } });
+  out({ type: 'item.completed', item: { type: 'agent_message', text: 'Implemented ' + file }});
+  out({ type: 'turn.completed', usage: { input_tokens: 900, cached_input_tokens: 600, output_tokens: 40 } });
+} else {
+  const now = new Date().toISOString(), sessions = require('path').join(process.env.HOME, '.codex', 'sessions');
+  fs.mkdirSync(sessions, { recursive: true });
+  fs.writeFileSync(require('path').join(sessions, 'rollout-fake.jsonl'), [
+    { timestamp: now, type: 'session_meta', payload: { id: 'codex-tui', cwd: process.cwd(), timestamp: now } },
+    { timestamp: now, type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 500, cached_input_tokens: 100, output_tokens: 20 } } } },
+  ].map(JSON.stringify).join('\\n'));
+  fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
+}
 process.exit(Number(process.env.FAKE_CODEX_EXIT || 0));`,
   npm: `fs.writeFileSync(log('npm.json'), JSON.stringify(process.argv.slice(2)));
+const runs = (fs.existsSync(log('npm-count')) ? Number(fs.readFileSync(log('npm-count'), 'utf8')) : 0) + 1;
+fs.writeFileSync(log('npm-count'), String(runs));
+if (runs <= Number(process.env.FAKE_NPM_FAIL_TIMES || 0)) { process.stdout.write('1 failing: cart total\\n'); process.exit(1); }
 if (process.env.FAKE_NPM_TOUCH) fs.writeFileSync(process.env.FAKE_NPM_TOUCH, 'written by tests\\n');
 process.stdout.write(process.env.FAKE_NPM_BYTES ? 'y'.repeat(Number(process.env.FAKE_NPM_BYTES)) : 'tests ok: 3 passed\\n');
 process.exit(Number(process.env.FAKE_NPM_EXIT || 0));`,
@@ -100,29 +127,32 @@ function runHarness(t, { env = {}, answer = true, omit = [], packageJson = { scr
   const read = name => readFileSync(join(logs, name), 'utf8');
   const logged = name => existsSync(join(logs, name));
   const state = () => JSON.parse(readFileSync(join(root, '.relay', 'state.json'), 'utf8')).task;
-  return { root, git, base, home, prompts, plans, classified, read, logged, state, run: () => main(['run'], root, deps) };
+  const saved = () => JSON.parse(readFileSync(join(root, '.relay', 'state.json'), 'utf8'));
+  return { root, git, base, home, deps, prompts, plans, classified, read, logged, state, saved, run: () => main(['run'], root, deps) };
 }
 test('run builds, tests with consent, and sends unstaged new files and evidence to review', async t => {
   const h = runHarness(t);
   await h.run();
-  const codexArgs = JSON.parse(h.read('codex.json'));
-  assert.deepEqual(codexArgs.slice(0, 4), ['-m', 'gpt-6-luna', '-c', 'model_reasoning_effort="low"'], 'a short task is routed to the small model');
-  assert.equal(codexArgs[codexArgs.indexOf('--ask-for-approval') + 1], 'on-request');
+  assert.deepEqual(JSON.parse(h.read('codex.json')),
+    ['exec', '--json', '-m', 'gpt-6-luna', '-c', 'model_reasoning_effort="low"', '-c', 'approval_policy="never"', '--sandbox', 'workspace-write', '-'],
+    'Codex runs to completion on the small model, sandboxed, and can never escalate');
+  assert.match(h.read('codex-prompt-1.txt'), /Implement this bounded task: Add feature; test it[\s\S]*Do not push, commit, or deploy/);
   assert.deepEqual(JSON.parse(h.read('npm.json')), ['test']);
   assert.deepEqual(JSON.parse(h.read('claude.json')), reviewArgs({ model: 'haiku', effort: 'low' }), 'a small diff gets the small reviewer');
-  assert.equal(h.plans.length, 1); assert.equal(h.classified.length, 0, 'clear-cut tasks never call the classifier');
+  assert.equal(h.plans.length, 2, 'the build plan, then what to do after the review'); assert.equal(h.classified.length, 0, 'clear-cut tasks never call the classifier');
   assert.equal(h.prompts.length, 1); assert.match(h.prompts[0], /npm test/);
   const packet = h.read('claude-input.txt');
   assert.match(packet, /export const feature = 1/); assert.match(packet, /src\/feature\.js/);
   assert.match(packet, /Node: v\d+/); assert.match(packet, /Exit code: 0/); assert.match(packet, /tests ok: 3 passed/);
   assert.equal(h.git('diff', '--cached', '--name-only').toString(), '');
-  assert.equal(h.git('rev-parse', 'HEAD').toString().trim(), h.base);
+  assert.equal(h.git('rev-parse', 'HEAD').toString().trim(), h.state().baseCommit, 'nothing is committed');
   const task = h.state();
   assert.equal(task.status, 'needs_human_decision');
-  assert.deepEqual(task.run.steps.map(s => s.step), ['started', 'built', 'testing', 'tests_recorded', 'reviewed']);
+  assert.deepEqual(task.run.steps.map(s => s.step), ['started', 'built', 'testing', 'tests_recorded', 'reviewed', 'done']);
   assert.equal(task.run.tests.diffHash, task.reviewHash);
   assert.equal(task.routing.build.tier, 'small'); assert.equal(task.routing.build.source, 'rules');
-  assert.deepEqual(task.routing.build.tokens, { input: 300, cacheRead: 600, cacheWrite: 0, output: 40, reasoning: 0, total: 940 }, 'build tokens come from the Codex session log');
+  assert.deepEqual(task.routing.build.tokens, { input: 300, cacheRead: 600, cacheWrite: 0, output: 40, reasoning: 0, total: 940 }, 'build tokens come from Codex events');
+  assert.equal(task.routing.build.sessionId, 'thread-fake');
   assert.equal(task.routing.review.model, 'haiku');
   assert.match(packet, new RegExp(`Tested diff SHA-256: ${task.reviewHash}`));
   assert.ok(!existsSync(join(h.root, '.relay', 'lock')));
@@ -201,10 +231,14 @@ test('API or proxy overrides block run before any provider starts', async t => {
   await assert.rejects(h.run(), error => /API\/proxy/.test(error.message) && !error.message.includes('should-not-print'));
   assert.ok(!h.logged('codex.json'));
 });
-test('run requires an interactive terminal for Codex approvals', async t => {
+test("relay build opens Codex's own window, which needs a terminal, and reads tokens from its session log", async t => {
   const h = runHarness(t);
-  await assert.rejects(main(['run'], h.root, { env: {}, isTTY: false }), /interactive terminal/);
+  await assert.rejects(main(['build'], h.root, { ...h.deps, isTTY: false }), /needs your terminal/);
   assert.ok(!h.logged('codex.json'));
+  await main(['build'], h.root, h.deps);
+  const args = JSON.parse(h.read('codex.json'));
+  assert.notEqual(args[0], 'exec'); assert.equal(args[args.indexOf('--ask-for-approval') + 1], 'on-request');
+  assert.equal(h.state().routing.build.tokens.total, 520); assert.equal(h.state().routing.build.sessionId, 'codex-tui');
 });
 test('the build plan can be bumped up before Codex starts, and borderline tasks ask the classifier', async t => {
   const goal = 'Add an export button to the reports page that downloads the visible rows as a CSV file, keeps the current filters, and shows a short confirmation message when the download starts';
@@ -213,11 +247,65 @@ test('the build plan can be bumped up before Codex starts, and borderline tasks 
   assert.equal(h.classified.length, 1, 'a borderline task gets one classifier call');
   const task = h.state();
   assert.equal(task.routing.build.source, 'you');
-  assert.deepEqual(JSON.parse(h.read('codex.json')).slice(0, 2), ['-m', task.routing.build.model]);
-  assert.equal(h.plans.length, 2, 'the plan is shown again after a change');
+  const args = JSON.parse(h.read('codex.json'));
+  assert.equal(args[args.indexOf('-m') + 1], task.routing.build.model);
+  assert.equal(h.plans.length, 3, 'the plan twice (after the change), then the after-review prompt');
 });
 test('cancelling the build plan starts nothing', async t => {
   const h = runHarness(t, { choices: ['q'] });
   await assert.rejects(h.run(), /Cancelled before Codex started/);
   assert.ok(!h.logged('codex.json')); assert.equal(h.state().run.steps.at(-1).step, 'cancelled');
+});
+test('after a review, "f" sends the findings back to the same Codex session and verifies again', async t => {
+  const h = runHarness(t, { choices: ['', 'f', ''] });
+  await h.run();
+  const fix = JSON.parse(h.read('codex-2.json'));
+  assert.deepEqual(fix.slice(0, 2), ['exec', 'resume']); assert.equal(fix.at(-2), 'thread-fake', 'the same session is resumed');
+  assert.equal(fix[fix.indexOf('-c', fix.indexOf('approval_policy="never"') - 1) + 1], 'approval_policy="never"');
+  assert.ok(fix.includes('sandbox_mode="workspace-write"'));
+  assert.match(h.read('codex-prompt-2.txt'), /Claude independently reviewed[\s\S]*Findings: one possible bug\./);
+  assert.equal(h.prompts.length, 2, 'tests ask for consent again after the fix');
+  const task = h.state();
+  assert.deepEqual(task.run.steps.map(s => s.step).filter(s => s !== 'testing' && s !== 'tests_recorded'),
+    ['started', 'built', 'reviewed', 'fix_requested', 'built', 'reviewed', 'done']);
+  assert.equal(task.codexRuns.length, 2); assert.equal(task.routing.build.tokens.total, 1880, 'tokens add up across the build and the fix');
+  assert.match(h.read('claude-input.txt'), /feature-2\.js/, 'the second review sees the fix');
+});
+test('typed follow-up instructions go to Codex instead of the findings', async t => {
+  const h = runHarness(t, { choices: ['', 'also add a README section', ''] });
+  await h.run();
+  assert.match(h.read('codex-prompt-2.txt'), /Follow-up from the user: also add a README section/);
+});
+test('failing tests can be fixed without leaving: the failure goes to Codex, then tests and review run again', async t => {
+  const h = runHarness(t, { env: { FAKE_NPM_FAIL_TIMES: '1' }, choices: ['', 'f', ''] });
+  await h.run();
+  assert.match(h.read('codex-prompt-2.txt'), /npm test failed[\s\S]*1 failing: cart total/);
+  const steps = h.state().run.steps.map(s => s.step);
+  assert.ok(steps.includes('tests_failed') && steps.at(-1) === 'done');
+  assert.equal(h.state().status, 'needs_human_decision');
+});
+test('the interactive prompt runs tasks back to back, each reviewed on its own changes', async t => {
+  const h = runHarness(t);
+  const lines = ['add a banner', '/status', 'add a footer', '/history', '/nope', '/quit'], logs = [];
+  const original = console.log; console.log = (...a) => logs.push(a.join(' '));
+  try { await main([], h.root, { ...h.deps, isTTY: true, readLine: async () => lines.shift() ?? null }); }
+  finally { console.log = original; }
+  const saved = h.saved();
+  assert.equal(saved.task.goal, 'add a footer'); assert.deepEqual(saved.history.map(x => x.goal), ['Add feature; test it', 'add a banner']);
+  const packet = h.read('claude-input.txt');
+  assert.match(packet, /feature-2\.js/); assert.doesNotMatch(packet, /src\/feature\.js/, "the first task's file is part of the second task's baseline");
+  assert.ok(logs.some(l => l.includes('needs_human_decision · add a banner')), '/status shows the current task');
+  assert.ok(logs.some(l => /^2\. needs_human_decision · add a banner/m.test(l)), '/history lists earlier tasks');
+  assert.ok(logs.some(l => l.includes('Unknown command /nope')));
+  assert.ok(!existsSync(join(h.root, '.relay', 'lock')), 'the lock is only held while a task runs');
+});
+test('the prompt offers to set up local git in a plain folder, and leaves it alone if declined', async t => {
+  const dir = tempDir(t, 'relay-plain-');
+  const original = console.log; console.log = () => {};
+  try {
+    await main([], dir, { isTTY: true, env: { HOME: dir }, confirm: async () => false, readLine: async () => null });
+    assert.ok(!existsSync(join(dir, '.git')));
+    await main([], dir, { isTTY: true, env: { HOME: dir }, confirm: async () => true, readLine: async () => null });
+  } finally { console.log = original; }
+  assert.ok(existsSync(join(dir, '.git')) && existsSync(join(dir, '.relay', 'state.json')));
 });
