@@ -28,7 +28,14 @@ function rowsFor(range, daily, provider, now = new Date()) {
     return { date, values: { [provider]: byDate.get(date) ?? 0 } };
   });
 }
-export function CodexAccount({ account, now, provider = 'codex' }) {
+// Codex's account report lags real use by hours, so today's bar is at least what this Mac's logs already show.
+const withToday = (daily, local) => {
+  const today = iso(new Date()), at = daily.findIndex(d => d.date === today);
+  if (!local) return daily;
+  if (at < 0) return [...daily, { date: today, tokens: local }];
+  return daily.map((d, i) => i === at ? { ...d, tokens: Math.max(d.tokens, local) } : d);
+};
+export function CodexAccount({ account, now, provider = 'codex', localToday = 0 }) {
   const [range, setRange] = useState('week');
   if (!account) return provider === 'codex' ? <section className="card account"><h2><Dot provider="codex" />{TITLES.codex}</h2><div className="note">Loading account usage from Codex…</div></section> : null;
   if (account.error) {
@@ -40,7 +47,7 @@ export function CodexAccount({ account, now, provider = 'codex' }) {
     );
   }
   const s = account.summary;
-  const rows = rowsFor(range, account.daily, provider);
+  const rows = rowsFor(range, withToday(account.daily, localToday), provider);
   const stats = [
     ['Lifetime tokens', s.lifetimeTokens != null && fmt(s.lifetimeTokens)],
     ['Peak day', s.peakDailyTokens != null && fmt(s.peakDailyTokens)],

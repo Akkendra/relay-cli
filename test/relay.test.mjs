@@ -79,6 +79,7 @@ if (args[0] === 'exec') {
   out({ type: 'item.started', item: { type: 'command_execution', command: 'npm test' } });
   if (process.env.FAKE_CODEX_TOUCH) out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: process.env.FAKE_CODEX_TOUCH, kind: 'update' }] } });
   if (process.env.FAKE_CODEX_CMD) { out({ type: 'item.started', item: { type: 'command_execution', command: process.env.FAKE_CODEX_CMD } }); fs.writeFileSync(log('codex-waiting'), '1'); require('child_process').execSync('sleep 5'); fs.writeFileSync(log('codex-finished'), '1'); }
+  if (process.env.FAKE_CODEX_LOCK) fs.writeFileSync('package-lock.json', JSON.stringify({ packages: { x: 'y'.repeat(150000) } }));
   if (process.env.FAKE_CODEX_SECRET) fs.writeFileSync('config.js', 'export const key = ' + JSON.stringify(process.env.FAKE_CODEX_SECRET) + ';\\n');
   if (!process.env.FAKE_CODEX_NOOP) fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
   out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: file, kind: 'add' }] } });
@@ -464,4 +465,21 @@ test('asks are capped at 2500 words and attach text files and images by path', a
   assert.deepEqual(prepareAsk(root, 'add/remove items, see src/missing.js').files, [], 'words with slashes that are not files stay text');
   assert.throws(() => prepareAsk(root, '@creds.txt'), /looks like it holds a credential/);
   assert.deepEqual(execArgs({ model: 'm', effort: 'low' }, { images: ['/a.png'] }).slice(0, 4), ['exec', '--image', '/a.png', '--json']);
+});
+test('lockfiles stay out of the reviewed diff and runs print a short summary', async t => {
+  const h = runHarness(t, { env: { FAKE_CODEX_LOCK: '1' } });
+  const out = []; h.deps.output = { write: s => out.push(String(s)) };
+  await h.run();
+  const packet = h.read('claude-input.txt');
+  assert.doesNotMatch(packet, /y{1000}/, 'the 150 KB lockfile is not sent');
+  assert.match(packet, /GENERATED LOCKFILES CHANGED[^\n]*\npackage-lock\.json/);
+  assert.equal(h.state().status, 'needs_human_decision', 'the review ran despite the big lockfile');
+  const text = out.join('');
+  assert.match(text, /npm test passed/); assert.doesNotMatch(text, /tests ok: 3 passed/, 'test output is summarized, not streamed');
+});
+test('review summary keeps findings and counts the missing-context points', async () => {
+  const { reviewSummary } = await import('../src/relay.mjs');
+  const r = '## Findings\n1. Bug in `x()`.\n\n## Missing context / evidence\n- a\n- b\n\n## Suggested next action\nFix it.';
+  assert.equal(reviewSummary(r), '## Findings\n1. Bug in `x()`.\n\n## Suggested next action\nFix it.\n\n(2 missing-context points left out; /review shows the full review.)');
+  assert.equal(reviewSummary('Findings: one possible bug.'), 'Findings: one possible bug.');
 });

@@ -48,7 +48,7 @@ export function loadModels(env = process.env) {
   return models;
 }
 
-const UP = /\b(architect\w*|refactor\w*|redesign\w*|migrat\w*|security|auth\w*|concurren\w*|race conditions?|performance|optimi[sz]\w*|database|schema|distributed|encrypt\w*|rewrite|across the (code ?base|repo\w*))\b/gi;
+const UP = /\b(architect\w*|refactor\w*|redesign\w*|migrat\w*|security|auth\w*|concurren\w*|race conditions?|performance|optimi[sz]\w*|database|schema|distributed|encrypt\w*|rewrite|rebuild\w*|from scratch|(?:entire|whole) (?:site|app|project)|across the (code ?base|repo\w*))\b/gi;
 const DOWN = /\b(typos?|rename\w*|comments?|docs?|readme|wording|copy ?edit\w*|colou?rs?|css|styles?|lint\w*|format\w*|bump\w*|one[- ]line|small)\b/gi;
 
 // Free, local estimate. Scores at 0 and 2 are borderline: those are the only cases sent to the classifier.
