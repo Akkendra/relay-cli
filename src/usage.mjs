@@ -126,6 +126,22 @@ function findRelayRoot(cwd) {
 function readJson(path) { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; } }
 const routed = c => c && { tier: c.tier ?? null, model: c.model ?? null, effort: c.effort ?? null, source: c.source ?? null, tokens: c.tokens ?? null };
 function routingSummary(r) { return r ? { build: routed(r.build), review: routed(r.review) } : null; }
+// One entry per Relay run (current task and history) for the cross-project Runs feed.
+function runsFor(root, state) {
+  return [...(state?.history ?? []), ...(state?.task ? [state.task] : [])].filter(t => t?.run).map(t => {
+    const r = t.run, last = r.steps?.at(-1)?.at ?? r.startedAt, u = t.usage;
+    return {
+      root, goal: String(t.goal ?? '').slice(0, 160), status: t.status, startedAt: r.startedAt, endedAt: last,
+      durationSec: Math.max(0, Math.round((new Date(last) - new Date(r.startedAt)) / 1000)),
+      build: t.routing?.build ? { model: t.routing.build.model, tier: t.routing.build.tier, tokens: t.routing.build.tokens?.total ?? null } : null,
+      review: t.routing?.review ? { model: t.routing.review.model, tier: t.routing.review.tier, tokens: u ? (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) : null } : null,
+      tests: r.tests ? { ran: r.tests.ran, exitCode: r.tests.exitCode ?? null, reason: r.tests.reason ?? null } : null,
+      flags: (r.flags ?? []).map(({ level, kind, target }) => ({ level, kind, target })), policyHash: r.policyHash ?? null,
+      steps: (r.steps ?? []).map(({ step, at }) => ({ step, at })), trace: r.trace ?? [], findings: String(t.lastReview?.findings ?? '').slice(0, 1200),
+    };
+  });
+}
+
 function relayTask(root, sessions) {
   const task = readJson(join(root, '.relay', 'state.json'))?.task;
   const review = readJson(join(root, '.relay', 'review.json'));
@@ -223,5 +239,8 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
       live: Boolean(s.lastAt) && now - new Date(s.lastAt) < liveWindowMs, tokens: s.tokens, costUSD: costOf(s),
     })),
     relay: [...byRoot.keys()].sort().map(root => ({ ...relayTask(root, byRoot.get(root)), root: short(root) })),
+    // Newest first; only the latest 10 carry their full trace, to keep each poll small.
+    runs: [...byRoot.keys()].flatMap(root => runsFor(short(root), readJson(join(root, '.relay', 'state.json'))))
+      .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? '')).slice(0, 30).map((r, i) => (i < 10 ? r : { ...r, trace: [], findings: '' })),
   };
 }
