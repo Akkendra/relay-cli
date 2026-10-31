@@ -77,6 +77,7 @@ if (args[0] === 'exec') {
   const out = e => process.stdout.write(JSON.stringify(e) + '\\n');
   out({ type: 'thread.started', thread_id: args[1] === 'resume' ? args.at(-2) : 'thread-fake' });
   out({ type: 'item.started', item: { type: 'command_execution', command: 'npm test' } });
+  if (process.env.FAKE_CODEX_SECRET) fs.writeFileSync('config.js', 'export const key = ' + JSON.stringify(process.env.FAKE_CODEX_SECRET) + ';\\n');
   if (!process.env.FAKE_CODEX_NOOP) fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
   out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: file, kind: 'add' }] } });
   out({ type: 'item.completed', item: { type: 'agent_message', text: 'Implemented ' + file }});
@@ -402,4 +403,10 @@ test('reviews get imported files as context and quotes are checked against the d
   assert.match(packet.prompt, /UNCHANGED FILES THE CHANGED CODE IMPORTS[\s\S]*--- src\/cart\.js\nexport const total/);
   const { unverifiedQuotes } = await import('../src/relay.mjs');
   assert.deepEqual(unverifiedQuotes('Bug at `export const line = () => total();` and `throw new Error(oops)`; see `src/cart.js`', packet.diff), ['throw new Error(oops)']);
+});
+test('a likely secret in the diff blocks the review before anything is sent to Claude', async t => {
+  // Built at runtime so the repository never contains a key-shaped literal.
+  const h = runHarness(t, { env: { FAKE_CODEX_SECRET: 'AKIA' + 'Q'.repeat(16) }, answer: false });
+  await assert.rejects(h.run(), /Possible secret in config\.js; nothing was sent to Claude/);
+  assert.ok(!h.logged('claude.json')); assert.equal(h.state().status, 'review_blocked');
 });
