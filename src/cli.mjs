@@ -77,7 +77,8 @@ export async function repl(cwd, deps) {
     history.add(input);
     const [command, ...rest] = input.split(/\s+/);
     try {
-      if (command === '/quit' || command === '/exit') { console.log('Bye.'); return; }
+      // Plain exit/quit leave too: as a task they would spend a full Codex run.
+      if (['/quit', '/exit', 'exit', 'quit', 'bye', ':q'].includes(input.toLowerCase())) { console.log('Bye.'); return; }
       else if (command === '/help') console.log(HELP);
       else if (command === '/status') { const t = readState(root).task; console.log(t ? describeTask(t) : 'No task yet. Type one.'); }
       else if (command === '/diff' || command === '/undo') {

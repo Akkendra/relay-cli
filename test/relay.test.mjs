@@ -410,3 +410,12 @@ test('a likely secret in the diff blocks the review before anything is sent to C
   await assert.rejects(h.run(), /Possible secret in config\.js; nothing was sent to Claude/);
   assert.ok(!h.logged('claude.json')); assert.equal(h.state().status, 'review_blocked');
 });
+for (const word of ['exit', 'quit', 'Exit', 'bye']) {
+  test(`typing "${word}" leaves the prompt instead of starting a task`, async t => {
+    const h = runHarness(t);
+    const original = console.log; console.log = () => {};
+    try { await main([], h.root, { ...h.deps, readLine: async () => word }); }
+    finally { console.log = original; }
+    assert.ok(!h.logged('codex.json')); assert.equal(h.saved().history ?? undefined, undefined);
+  });
+}
