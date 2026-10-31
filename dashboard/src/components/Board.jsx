@@ -8,11 +8,27 @@ export function Board({ layout, setLayout, editing, widgets }) {
   const [dragging, setDragging] = useState(null);
   // Masonry packing: each tile spans as many 4px rows as its content needs, and dense flow lets smaller tiles fill gaps.
   const ref = useRef(null);
+  // Then each tile stretches down to the next tile below it, so columns end level instead of leaving gaps.
   const [spans, setSpans] = useState({});
   useLayoutEffect(() => {
     const measure = () => {
+      const board = ref.current;
+      if (!board) return;
+      const els = [...board.querySelectorAll(':scope > .widget')];
+      board.classList.add('measuring');
+      const natural = Object.fromEntries(els.map(el => [el.id, Math.ceil(([...el.children].reduce((h, c) => h + c.getBoundingClientRect().height, 0) + GAP) / ROW)]));
+      // Positions come from the natural layout, so a stretched tile never pushes the ones below it down.
+      const shown = els.map(el => el.style.gridRowEnd);
+      els.forEach(el => { el.style.gridRowEnd = `span ${natural[el.id]}`; });
+      const rects = new Map(els.map(el => [el.id, el.getBoundingClientRect()]));
+      els.forEach((el, i) => { el.style.gridRowEnd = shown[i]; });
+      board.classList.remove('measuring');
       const next = {};
-      for (const el of ref.current?.querySelectorAll(':scope > .widget') ?? []) next[el.id] = Math.ceil(([...el.children].reduce((h, c) => h + c.getBoundingClientRect().height, 0) + GAP) / ROW);
+      for (const el of els) {
+        const r = rects.get(el.id), bottom = r.top + natural[el.id] * ROW - 1;
+        const below = els.map(o => rects.get(o.id)).filter(o => o.top >= bottom && o.left < r.right - 1 && r.left < o.right - 1).map(o => o.top);
+        next[el.id] = below.length ? Math.max(natural[el.id], Math.round((Math.min(...below) - r.top) / ROW)) : natural[el.id];
+      }
       setSpans(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     };
     let frame;
