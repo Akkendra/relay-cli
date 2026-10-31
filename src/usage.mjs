@@ -149,7 +149,8 @@ function claudeLimits(configDir, now) {
   return limits.primary || limits.secondary ? limits : null;
 }
 
-export function summarize({ home, configDir = join(home, '.config', 'relay'), now = new Date(), days = 30, liveWindowMs = 120000 }) {
+// codexAccount is the account-wide report from codex-account.mjs (or null); its limits are fresher than the session logs'.
+export function summarize({ home, configDir = join(home, '.config', 'relay'), now = new Date(), days = 30, liveWindowMs = 120000, codexAccount = null }) {
   const sources = {
     codex: { dir: join(home, '.codex', 'sessions'), parse: parseCodexSession },
     claude: { dir: join(home, '.claude', 'projects'), parse: parseClaudeSession },
@@ -188,7 +189,9 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
   return {
     generatedAt: now.toISOString(),
     sources: Object.fromEntries(Object.entries(sourceInfo).map(([k, v]) => [k, { ...v, dir: short(v.dir) }])),
-    limits: { codex: latestCodexLimits, claude: claudeLimits(configDir, now) },
+    limits: { codex: codexAccount?.limits?.primary || codexAccount?.limits?.secondary ? codexAccount.limits : latestCodexLimits, claude: claudeLimits(configDir, now) },
+    codexAccount: codexAccount && (codexAccount.error ? { error: codexAccount.error, observedAt: codexAccount.observedAt }
+      : { observedAt: codexAccount.observedAt, summary: codexAccount.summary, daily: codexAccount.daily }),
     daily,
     models: [...models.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     sessions: sessions.sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '')).slice(0, 300).map(s => ({

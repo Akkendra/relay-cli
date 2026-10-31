@@ -97,12 +97,13 @@ A read-only page covering every Codex and Claude Code session on this machine, n
 - the plan-limit windows Codex reports (5-hour and weekly), with reset times;
 - tokens per day and per model, with or without cache reads, plus a table view;
 - every session, with live ones marked;
+- your **Codex account** across all devices: lifetime tokens, peak day, streaks, longest turn, and tokens per day, read through `codex app-server` (`account/usage/read`) so Codex handles sign-in. Relay asks at most once a minute, and these read-only calls spend no tokens;
 - Relay tasks found in those sessions' folders: status, steps, test result, and review tokens and cost.
 
 **What it doesn't do:**
 
 - It reads only counts and metadata, never prompts or code.
-- It never guesses plan limits: Codex's come from its session logs, and Claude's from `relay statusline` (see below).
+- It never guesses plan limits. Codex's come live from its app server (with the session logs as a fallback), and Claude's from `relay statusline` (see below).
 - The review cost shown is Claude's list-price estimate, not your subscription bill.
 - Both log formats are undocumented, so unreadable lines are counted in the footer rather than guessed at.
 
@@ -112,7 +113,7 @@ A read-only page covering every Codex and Claude Code session on this machine, n
 { "statusLine": { "type": "command", "command": "/absolute/path/to/node /path/to/relay/bin/relay.mjs statusline" } }
 ```
 
-It prints a short line, such as `Opus 5.5 · 59% session · 38% week`. It saves only those two windows and their reset times to `~/.config/relay/claude-limits.json`, never the session's paths, prompts, or IDs. The dashboard then shows Claude bars next to the Codex ones. They update only while Claude Code is running, and a window that has passed its reset time is dropped rather than shown out of date.
+It prints a short line, such as `Opus 5.5 · 42% session · 17% week`. It saves only those two windows and their reset times to `~/.config/relay/claude-limits.json`, never the session's paths, prompts, or IDs. The dashboard then shows Claude bars next to the Codex ones. They update only while Claude Code is running, and a window that has passed its reset time is dropped rather than shown out of date.
 
 **From your phone (Tailscale).** Keep the server on loopback and let Tailscale Serve share it with your own devices only. Use `serve`, never `funnel`; Funnel publishes to the whole internet.
 

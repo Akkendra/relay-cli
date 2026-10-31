@@ -11,7 +11,7 @@ const now = new Date('2026-10-31T03:00:00Z');
 const input = {
   model: { display_name: 'Opus 5.5' }, cwd: '/secret/project', transcript_path: '/secret/t.jsonl', session_id: 'abc',
   context_window: { used_percentage: 12 },
-  rate_limits: { five_hour: { used_percentage: 59.4, resets_at: 1793427600 }, seven_day: { used_percentage: 38, resets_at: 1793660400 } },
+  rate_limits: { five_hour: { used_percentage: 42.6, resets_at: 1793427600 }, seven_day: { used_percentage: 17, resets_at: 1793660400 } },
 };
 async function run(t, stdinText) {
   const home = mkdtempSync(join(tmpdir(), 'relay-status-'));
@@ -23,14 +23,14 @@ async function run(t, stdinText) {
 
 test('statusline saves only the plan-limit windows and prints a short line', async t => {
   const { home, printed, file } = await run(t, JSON.stringify(input));
-  assert.equal(printed, 'Opus 5.5 · 59% session · 38% week');
+  assert.equal(printed, 'Opus 5.5 · 43% session · 17% week');
   const saved = JSON.parse(readFileSync(file, 'utf8'));
   assert.deepEqual(saved, extractLimits(input, now));
   assert.equal(saved.primary.windowMinutes, 300); assert.equal(saved.secondary.windowMinutes, 10080);
   assert.doesNotMatch(readFileSync(file, 'utf8'), /secret|abc|Opus/, 'nothing else from the session is kept');
   assert.equal(statSync(file).mode & 0o777, 0o600);
   const limits = summarize({ home, now }).limits.claude;
-  assert.equal(limits.primary.usedPercent, 59.4); assert.equal(limits.secondary.usedPercent, 38);
+  assert.equal(limits.primary.usedPercent, 42.6); assert.equal(limits.secondary.usedPercent, 17);
 });
 test('without rate limits (API users, first response) nothing is saved and context is shown', async t => {
   const { printed, file } = await run(t, JSON.stringify({ model: { display_name: 'Sonnet 5.5' }, context_window: { used_percentage: 40.2 } }));
@@ -44,6 +44,6 @@ test('windows past their reset time are dropped from the summary', async t => {
   const { home } = await run(t, JSON.stringify(input));
   const later = new Date('2026-11-01T12:00:00Z');
   const limits = summarize({ home, now: later }).limits.claude;
-  assert.equal(limits.primary, null, 'the 5-hour window reset'); assert.equal(limits.secondary.usedPercent, 38);
+  assert.equal(limits.primary, null, 'the 5-hour window reset'); assert.equal(limits.secondary.usedPercent, 17);
   assert.equal(summarize({ home, now: new Date('2026-12-01T00:00:00Z') }).limits.claude, null);
 });

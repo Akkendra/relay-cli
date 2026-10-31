@@ -6,9 +6,11 @@ import { DailyChart, DailyTable } from './components/DailyChart.jsx';
 import { ModelBars } from './components/ModelBars.jsx';
 import { Sessions } from './components/Sessions.jsx';
 import { RelayTasks } from './components/RelayTasks.jsx';
-import { METRICS } from './format.js';
+import { CodexAccount } from './components/CodexAccount.jsx';
+import { METRICS, metricName, metricValue } from './format.js';
 import { usePersisted, useSummary } from './hooks.js';
 
+const SERIES = ['codex', 'claude'];
 const RANGES = [{ value: '7', label: '7d' }, { value: '14', label: '14d' }, { value: '30', label: '30d' }];
 const NEXT_THEME = { auto: 'light', light: 'dark', dark: 'auto' };
 
@@ -44,6 +46,7 @@ export function App() {
 
   const now = data ? Date.now() : 0;
   const days = data ? data.daily.slice(-Number(range)) : [];
+  const rows = days.map(d => ({ date: d.date, values: { codex: metricValue(d.codex, metric), claude: metricValue(d.claude, metric) } }));
   return (
     <main>
       <header>
@@ -56,18 +59,20 @@ export function App() {
       {data && (
         <>
           <Limits limits={data.limits} now={now} />
+          <CodexAccount account={data.codexAccount} dates={days.map(d => d.date)} now={now} />
           <Tiles data={data} metric={metric} />
           <section className="grid two">
             <div className="card">
               <div className="chart-head">
-                <h2>Tokens per day</h2>
+                <h2>Tokens per day · this Mac</h2>
                 <div className="legend"><span><Dot provider="codex" />Codex</span><span><Dot provider="claude" />Claude</span></div>
                 <span className="spacer" />
                 <Seg label="Metric" options={METRICS} value={metric} onChange={setMetric} />
                 <Seg label="Range" options={RANGES} value={range} onChange={setRange} />
                 <button type="button" aria-pressed={showTable} onClick={() => setShowTable(v => !v)}>Table</button>
               </div>
-              {showTable ? <DailyTable days={days} metric={metric} /> : <DailyChart days={days} metric={metric} />}
+              {showTable ? <DailyTable rows={rows} series={SERIES} />
+                : <DailyChart rows={rows} series={SERIES} label={`Tokens per day on this Mac, ${metricName(metric)}, Codex and Claude stacked`} />}
             </div>
             <ModelBars models={data.models} metric={metric} />
           </section>

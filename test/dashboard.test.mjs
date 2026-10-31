@@ -94,7 +94,7 @@ test('missing log folders produce an empty summary instead of an error', t => {
 });
 test('dashboard serves read-only data on loopback and rejects foreign hosts', async t => {
   const { home } = fakeHome(t);
-  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), now: () => now, distDir: fakeDist(t) });
+  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), readAccount: async () => null, now: () => now, distDir: fakeDist(t) });
   t.after(() => server.close());
   const { address, port } = server.address();
   assert.equal(address, '127.0.0.1');
@@ -119,7 +119,7 @@ test('dashboard serves read-only data on loopback and rejects foreign hosts', as
 });
 test('an explicitly allowed proxy host is accepted while other hosts stay blocked', async t => {
   const { home } = fakeHome(t);
-  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), now: () => now, allowHosts: ['mac.tail1234.ts.net'], distDir: fakeDist(t) });
+  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), readAccount: async () => null, now: () => now, allowHosts: ['mac.tail1234.ts.net'], distDir: fakeDist(t) });
   t.after(() => server.close());
   const { port } = server.address();
   const status = async host => (await rawGet(port, '/api/summary', host)).status;
@@ -130,7 +130,7 @@ test('an explicitly allowed proxy host is accepted while other hosts stay blocke
 });
 test('an unbuilt dashboard explains how to build it while the API keeps working', async t => {
   const { home } = fakeHome(t);
-  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), now: () => now, distDir: join(home, 'missing-dist') });
+  const server = await startDashboard({ port: 0, home, configDir: join(home, '.config', 'relay'), readAccount: async () => null, now: () => now, distDir: join(home, 'missing-dist') });
   t.after(() => server.close());
   const { port } = server.address();
   const page = await rawGet(port, '/');
