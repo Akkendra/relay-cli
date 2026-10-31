@@ -101,6 +101,9 @@ process.exit(Number(process.env.FAKE_NPM_EXIT || 0));`,
   claude: `fs.writeFileSync(log('claude.json'), JSON.stringify(process.argv.slice(2)));
 fs.writeFileSync(log('claude-input.txt'), fs.readFileSync(0, 'utf8'));
 const mode = process.env.FAKE_CLAUDE;
+if (fs.readFileSync(log('claude-input.txt'), 'utf8').startsWith('Answer a question')) {
+  console.log(JSON.stringify({ is_error: false, result: process.env.FAKE_QUICK ?? 'NEED_MORE_CONTEXT', usage: { input_tokens: 900, output_tokens: 30 } })); process.exit(0);
+}
 if (mode === 'exit1') { console.error('authentication expired'); process.exit(1); }
 if (mode === 'badjson') { console.log('not json'); process.exit(0); }
 console.log(JSON.stringify({ is_error: mode === 'is_error', result: 'Findings: one possible bug.', usage: null }));`,
@@ -318,7 +321,7 @@ test('questions are answered read-only, and a build with no changes skips tests 
   const ask = JSON.parse(h.read('codex-1.json'));
   assert.equal(ask[ask.indexOf('--sandbox') + 1], 'read-only'); assert.equal(ask[ask.indexOf('-m') + 1], 'gpt-6-luna');
   assert.match(h.read('codex-prompt-1.txt'), /Do not modify anything[\s\S]*where is the site hosted/);
-  assert.equal(h.prompts.length, 0, 'no test prompt'); assert.ok(!h.logged('claude.json'), 'no review');
+  assert.equal(h.prompts.length, 0, 'no test prompt'); assert.doesNotMatch(h.read('claude-input.txt'), /independent reviewer/, 'no review');
   assert.equal(h.state().status, 'no_changes'); assert.equal(h.saved().history.length, 1, 'only /task created a task');
 });
 for (const [text, question] of [['where is the site hosted', true], ['How do I run it?', true], ['add a banner', false], ['Fix the typo in the footer', false]]) {
@@ -350,4 +353,15 @@ test('Tab completes slash commands', async () => {
   const { complete } = await import('../src/cli.mjs');
   assert.deepEqual(complete('/st'), [['/status'], '/st']); assert.deepEqual(complete('/'), [complete('/')[0], '/']);
   assert.ok(complete('/').length && complete('/')[0].includes('/undo')); assert.deepEqual(complete('add a'), [[], 'add a']);
+});
+test('simple questions are answered cheaply by Claude from the file list and README; harder ones fall back to read-only Codex', async t => {
+  const h = runHarness(t, { env: { FAKE_QUICK: 'Run npm start, then open http://localhost:8080.' } });
+  const logs = [], lines = ['how do I run it?', '/quit'];
+  const original = console.log; console.log = (...a) => logs.push(a.join(' '));
+  try { await main([], h.root, { ...h.deps, readLine: async () => lines.shift() ?? null }); }
+  finally { console.log = original; }
+  assert.ok(logs.includes('Run npm start, then open http://localhost:8080.')); assert.ok(!h.logged('codex.json'), 'Codex is never started');
+  const args = JSON.parse(h.read('claude.json'));
+  assert.equal(args[args.indexOf('--tools') + 1], ''); assert.equal(args[args.indexOf('--model') + 1], 'haiku');
+  assert.match(h.read('claude-input.txt'), /FILES \(\d+\)[\s\S]*package\.json/);
 });
