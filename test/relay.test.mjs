@@ -356,12 +356,12 @@ test('Tab completes slash commands', async () => {
   assert.ok(complete('/').length && complete('/')[0].includes('/undo')); assert.deepEqual(complete('add a'), [[], 'add a']);
 });
 test('simple questions are answered cheaply by Claude from the file list and README; harder ones fall back to read-only Codex', async t => {
-  const h = runHarness(t, { env: { FAKE_QUICK: 'Run npm start, then open http://localhost:8080.' } });
+  const h = runHarness(t, { env: { FAKE_QUICK: 'Run npm start, then open http://localhost:8080.\nSources: package.json' } });
   const logs = [], lines = ['how do I run it?', '/quit'];
   const original = console.log; console.log = (...a) => logs.push(a.join(' '));
   try { await main([], h.root, { ...h.deps, readLine: async () => lines.shift() ?? null }); }
   finally { console.log = original; }
-  assert.ok(logs.includes('Run npm start, then open http://localhost:8080.')); assert.ok(!h.logged('codex.json'), 'Codex is never started');
+  assert.ok(logs.some(l => l.startsWith('Run npm start, then open http://localhost:8080.'))); assert.ok(!h.logged('codex.json'), 'Codex is never started');
   const args = JSON.parse(h.read('claude.json'));
   assert.equal(args[args.indexOf('--tools') + 1], ''); assert.equal(args[args.indexOf('--model') + 1], 'haiku');
   assert.match(h.read('claude-input.txt'), /FILES \(\d+\)[\s\S]*package\.json/);
@@ -392,4 +392,14 @@ test('/continue sends a follow-up to the same Codex session without a new task',
   assert.deepEqual(args.slice(0, 2), ['exec', 'resume']); assert.equal(args.at(-2), 'thread-fake');
   assert.match(h.read('codex-prompt-2.txt'), /Follow-up from the user: make it blue/);
   assert.equal(h.saved().task.goal, 'add a banner'); assert.equal(h.saved().history.length, 1);
+});
+test('reviews get imported files as context and quotes are checked against the diff', async t => {
+  const { root } = fixture(t);
+  mkdirSync(join(root, 'src')); writeFileSync(join(root, 'src', 'cart.js'), 'export const total = () => 0;\n');
+  const task = createTask(root, 'receipt');
+  writeFileSync(join(root, 'src', 'receipt.js'), "import { total } from './cart.js';\nexport const line = () => total();\n");
+  const packet = reviewPacket(root, task);
+  assert.match(packet.prompt, /UNCHANGED FILES THE CHANGED CODE IMPORTS[\s\S]*--- src\/cart\.js\nexport const total/);
+  const { unverifiedQuotes } = await import('../src/relay.mjs');
+  assert.deepEqual(unverifiedQuotes('Bug at `export const line = () => total();` and `throw new Error(oops)`; see `src/cart.js`', packet.diff), ['throw new Error(oops)']);
 });
