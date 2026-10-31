@@ -41,11 +41,11 @@ export function startDashboard({ port = 4318, home = homedir(), configDir = rela
   const server = createServer((req, res) => {
     if (!hosts.has(String(req.headers.host ?? '').toLowerCase())) { res.writeHead(421, headers).end('Misdirected request'); return; }
     if (req.method !== 'GET') { res.writeHead(405, { ...headers, Allow: 'GET' }).end('Read-only'); return; }
-    const path = new URL(req.url, 'http://localhost').pathname;
+    const url = new URL(req.url, 'http://localhost'), path = url.pathname;
     if (path === '/api/summary') {
       let body;
       try {
-        const summary = summarize({ home, configDir, now: now(), codexAccount: account.get() });
+        const summary = summarize({ home, configDir, now: now(), codexAccount: account.get(), project: url.searchParams.get('project') || null });
         codexIds = summary.sessions.filter(s => s.provider === 'codex' && s.id).map(s => s.id);
         body = JSON.stringify({ ...summary, catalog: catalog.get() });
       }

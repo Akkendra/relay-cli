@@ -1,9 +1,8 @@
 import { Fragment, useState } from 'react';
 import { Dot, Seg } from './Seg.jsx';
 import { DailyChart } from './DailyChart.jsx';
-import { ago, fmt } from '../format.js';
+import { ago, duration, fmt } from '../format.js';
 
-const minutes = sec => sec >= 3600 ? `${Math.floor(sec / 3600)}h ${Math.round(sec % 3600 / 60)}m` : `${Math.round(sec / 60)}m`;
 const days = n => `${n} day${n === 1 ? '' : 's'}`;
 
 // Account-wide Codex usage (all devices, the desktop app, cloud tasks), as Codex's own /usage reports it.
@@ -51,7 +50,7 @@ export function CodexAccount({ account, now, provider = 'codex', localToday = 0 
   const stats = [
     ['Lifetime tokens', s.lifetimeTokens != null && fmt(s.lifetimeTokens)],
     ['Peak day', s.peakDailyTokens != null && fmt(s.peakDailyTokens)],
-    [provider === 'codex' ? 'Longest turn' : 'Longest session', s.longestRunningTurnSec != null && minutes(s.longestRunningTurnSec)],
+    [provider === 'codex' ? 'Longest turn' : 'Longest session', s.longestRunningTurnSec != null && duration(s.longestRunningTurnSec)],
     ['Current streak', s.currentStreakDays != null && days(s.currentStreakDays)],
     ['Longest streak', s.longestStreakDays != null && days(s.longestStreakDays)],
   ];

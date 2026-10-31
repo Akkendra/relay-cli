@@ -177,7 +177,7 @@ export function reviewSummary(text) {
   return `${parts.filter(p => p !== missing).join('').trim()}\n\n(${points || 'Some'} missing-context point${points === 1 ? '' : 's'} left out; /review shows the full review.)`;
 }
 // Likely credentials in added lines. Anything that matches stops Relay from sending the text to a provider.
-const SECRETS = [/AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /\bgh[pousr]_[A-Za-z0-9]{30,}/, /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/,
+export const SECRETS = [/AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /\bgh[pousr]_[A-Za-z0-9]{30,}/, /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/,
   /\bxox[abprs]-[A-Za-z0-9-]{10,}/, /\b(api[_-]?key|secret|password|passwd|token)\b\s*[:=]\s*['"][^'"\s]{12,}['"]/i];
 export function findSecrets(diff) {
   const hits = [];

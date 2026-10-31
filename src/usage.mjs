@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { SECRETS } from './relay.mjs';
 
-// Reads local Codex and Claude Code session logs. Only counts and metadata are extracted; message content is never
-// returned. Both formats are undocumented and may change, so unknown or malformed lines are counted, never fatal.
+// Reads local Codex and Claude Code session logs. Only counts, metadata and the first 100 characters of each
+// session's first prompt are extracted (hidden if it looks like a credential); no other message content is returned.
+// Both formats are undocumented and may change, so unknown or malformed lines are counted, never fatal.
 
 const cache = new Map();
 function jsonlFiles(dir, depth = 3) {
@@ -41,7 +43,25 @@ function localDate(iso) { return new Date(iso).toLocaleDateString('en-CA'); }
 const localHour = iso => { const d = new Date(iso); return `${localDate(d)}T${String(d.getHours()).padStart(2, '0')}`; };
 // Sessions keep per-day and per-model totals instead of raw events, so a poll merges small maps.
 function newSession(provider, path) {
-  return { provider, path, id: null, cwd: null, startedAt: null, lastAt: null, models: [], tokens: emptyTokens(), byDay: {}, byHour: {}, byModel: {}, limits: null, skippedLines: 0 };
+  return { provider, path, id: null, cwd: null, startedAt: null, lastAt: null, prompt: null, activeSec: 0, lastMs: 0, models: [], tokens: emptyTokens(), byDay: {}, byHour: {}, byModel: {}, limits: null, skippedLines: 0 };
+}
+// shortcut: active time is the sum of gaps of at most 5 minutes between log lines, so a long silent tool run counts
+// as idle; good enough to compare sessions, upgrade if the logs ever record turn durations.
+const IDLE_MS = 300000;
+function active(s, at) {
+  const t = Date.parse(at);
+  if (!t) return;
+  if (s.lastMs && t > s.lastMs && t - s.lastMs <= IDLE_MS) s.activeSec += (t - s.lastMs) / 1000;
+  s.lastMs = Math.max(s.lastMs, t);
+}
+// The first thing the user asked, so sessions can be told apart. Injected context (<...>, AGENTS.md) is skipped.
+const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.find(b => b?.type === 'text' || b?.type === 'input_text')?.text : null;
+export function promptLine(content) {
+  const text = textOf(content);
+  if (typeof text !== 'string') return null;
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (!t || t.startsWith('<') || t.startsWith('# AGENTS.md')) return null;
+  return SECRETS.some(re => re.test(text)) ? '(hidden: looks like a credential)' : t.slice(0, 100);
 }
 function record(s, at, model, t) {
   if (at) { addTokens(s.byDay[localDate(at)] ??= emptyTokens(), t); s.byHour[localHour(at)] = (s.byHour[localHour(at)] ?? 0) + t.total; }
@@ -63,6 +83,8 @@ export function parseCodexSession(lines, path) {
   for (const l of lines) {
     const p = l?.payload;
     if (l?.timestamp && (!s.lastAt || l.timestamp > s.lastAt)) s.lastAt = l.timestamp;
+    if (l?.timestamp) active(s, l.timestamp);
+    if (!s.prompt && l?.type === 'response_item' && p?.type === 'message' && p.role === 'user') s.prompt = promptLine(p.content);
     if (l?.type === 'session_meta' && p) { s.id = p.id ?? p.session_id ?? null; s.cwd = p.cwd ?? null; s.startedAt = p.timestamp ?? l.timestamp ?? null; }
     else if (l?.type === 'turn_context' && typeof p?.model === 'string' && !s.models.includes(p.model)) s.models.push(p.model);
     else if (l?.type === 'event_msg' && p?.type === 'token_count') {
@@ -92,7 +114,9 @@ export function parseClaudeSession(lines, path) {
     if (l?.timestamp) {
       if (!s.startedAt || l.timestamp < s.startedAt) s.startedAt = l.timestamp;
       if (!s.lastAt || l.timestamp > s.lastAt) s.lastAt = l.timestamp;
+      active(s, l.timestamp);
     }
+    if (!s.prompt && l?.type === 'user' && !l.isMeta) s.prompt = promptLine(l.message?.content);
     if (!s.id && typeof l?.sessionId === 'string') s.id = l.sessionId;
     if (!s.cwd && typeof l?.cwd === 'string') s.cwd = l.cwd;
     const m = l?.type === 'assistant' ? l.message : null;
@@ -167,7 +191,7 @@ function localAccount(sessions, now) {
   for (const s of sessions) {
     lifetime += s.tokens.total;
     for (const [date, t] of Object.entries(s.byDay)) byDay[date] = (byDay[date] ?? 0) + t.total;
-    if (s.startedAt && s.lastAt) longest = Math.max(longest, (new Date(s.lastAt) - new Date(s.startedAt)) / 1000);
+    longest = Math.max(longest, s.activeSec);
   }
   const dates = Object.keys(byDay).filter(d => byDay[d] > 0).sort(), day = 86400000;
   let run = 0, best = 0;
@@ -187,7 +211,9 @@ export function claudeLimits(configDir, now = new Date()) {
 }
 
 // codexAccount is the account-wide report from codex-account.mjs (or null); its limits are fresher than the session logs'.
-export function summarize({ home, configDir = join(home, '.config', 'relay'), now = new Date(), days = 30, liveWindowMs = 120000, codexAccount = null }) {
+// project (a ~-shortened folder from `projects`) limits sessions, charts and runs to that folder; plan limits stay account-wide.
+export function summarize({ home, configDir = join(home, '.config', 'relay'), now = new Date(), days = 30, liveWindowMs = 120000, codexAccount = null, project = null }) {
+  const short = p => p && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   const sources = {
     codex: { dir: join(home, '.codex', 'sessions'), parse: parseCodexSession },
     claude: { dir: join(home, '.claude', 'projects'), parse: parseClaudeSession },
@@ -204,6 +230,11 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
     sourceInfo[name] = { dir: src.dir, files: files.length, skippedLines, unreadable };
   }
   for (const file of cache.keys()) if (!seen.has(file)) cache.delete(file);
+  const latestCodexLimits = sessions.filter(s => s.limits).sort((a, b) => a.limits.observedAt < b.limits.observedAt ? 1 : -1)[0]?.limits ?? null;
+  const counts = new Map();
+  for (const s of sessions) if (s.cwd) counts.set(short(s.cwd), (counts.get(short(s.cwd)) ?? 0) + 1);
+  const projects = [...counts].map(([path, sessions]) => ({ path, sessions })).sort((a, b) => b.sessions - a.sessions || a.path.localeCompare(b.path));
+  if (project) sessions.splice(0, Infinity, ...sessions.filter(s => short(s.cwd) === project));
 
   const start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - (days - 1));
   const daily = [];
@@ -228,12 +259,11 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
   const claudeCosts = readJson(join(configDir, 'claude-costs.json')) ?? {}, codexCosts = codexAccount?.threadCosts ?? {};
   const costOf = s => (s.provider === 'claude' ? claudeCosts[s.id]?.usd : codexCosts[s.id]) ?? null;
   const claudeAccount = localAccount(sessions.filter(s => s.provider === 'claude'), now);
-  const latestCodexLimits = sessions.filter(s => s.limits).sort((a, b) => a.limits.observedAt < b.limits.observedAt ? 1 : -1)[0]?.limits ?? null;
-  const short = p => p && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   return {
     generatedAt: now.toISOString(),
     sources: Object.fromEntries(Object.entries(sourceInfo).map(([k, v]) => [k, { ...v, dir: short(v.dir) }])),
     limits: { codex: codexAccount?.limits?.primary || codexAccount?.limits?.secondary ? codexAccount.limits : latestCodexLimits, claude: claudeLimits(configDir, now) },
+    projects,
     claudeAccount,
     codexAccount: codexAccount && (codexAccount.error ? { error: codexAccount.error, observedAt: codexAccount.observedAt }
       : { observedAt: codexAccount.observedAt, summary: codexAccount.summary, daily: codexAccount.daily }),
@@ -242,7 +272,7 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
     models: [...models.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     sessions: sessions.sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '')).slice(0, 300).map(s => ({
       provider: s.provider, id: s.id, project: short(s.cwd), relayProject: Boolean(s.cwd && rootOf.get(s.cwd)), models: s.models, startedAt: s.startedAt, lastAt: s.lastAt,
-      live: Boolean(s.lastAt) && now - new Date(s.lastAt) < liveWindowMs, tokens: s.tokens, costUSD: costOf(s),
+      live: Boolean(s.lastAt) && now - new Date(s.lastAt) < liveWindowMs, tokens: s.tokens, costUSD: costOf(s), prompt: s.prompt, activeSec: Math.round(s.activeSec),
     })),
     relay: [...byRoot.keys()].sort().map(root => ({ ...relayTask(root, byRoot.get(root)), root: short(root) })),
     // Newest first; only the latest 10 carry their full trace, to keep each poll small.

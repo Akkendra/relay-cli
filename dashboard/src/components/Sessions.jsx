@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { Dot, Seg } from './Seg.jsx';
-import { KEYS, ago, fmt, groupSessions, projectName, providerName } from '../format.js';
+import { KEYS, ago, duration, fmt, groupSessions, matches, projectName, providerName } from '../format.js';
 
 const PAGE_SIZE = 10;
 const PROVIDERS = [{ value: 'all', label: 'All' }, { value: 'codex', label: 'Codex' }, { value: 'claude', label: 'Claude' }];
@@ -9,9 +9,13 @@ function Row({ s, now, count, open, onToggle, child }) {
     <tr className={`${count > 1 ? 'clickable' : ''}${child ? ' child' : ''}`} onClick={onToggle} aria-expanded={count > 1 ? open : undefined}>
       <td>{s.live ? <span className="status good live">Live</span> : <span className="status idle muted">Idle</span>}</td>
       <td><span className="label plain"><Dot provider={s.provider} />{providerName(s.provider)}</span></td>
-      <td className="project" title={s.project ?? ''}>{child ? <span className="muted">↳ session</span> : <>{projectName(s.project)}{s.relayProject && <span className="muted"> · Relay</span>}</>}</td>
+      <td className="project" title={s.project ?? ''}>
+        {child ? <span className="muted">↳ session</span> : <>{projectName(s.project)}{s.relayProject && <span className="muted"> · Relay</span>}</>}
+        {s.prompt && <div className="prompt muted" title={s.prompt}>{s.prompt}</div>}
+      </td>
       <td>{count > 1 ? <span className="count">{count} sessions {open ? '▾' : '▸'}</span> : (s.models.join(', ') || '—')}</td>
       <td title={s.lastAt ?? ''}>{ago(s.lastAt, now)}</td>
+      <td className="n" title="Active time: gaps of up to 5 minutes between log entries">{duration(s.activeSec)}</td>
       {KEYS.map(k => <td key={k} className="n">{k === 'total' ? <b>{fmt(s.tokens[k])}</b> : fmt(s.tokens[k])}</td>)}
       <td className="n">{s.costUSD == null ? '—' : `$${s.costUSD.toFixed(2)}`}</td>
     </tr>
@@ -21,7 +25,8 @@ function Row({ s, now, count, open, onToggle, child }) {
 export function Sessions({ sessions, provider, onProvider, now }) {
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState(null);
-  const groups = groupSessions(sessions.filter(s => provider === 'all' || s.provider === provider));
+  const [query, setQuery] = useState('');
+  const groups = groupSessions(sessions.filter(s => (provider === 'all' || s.provider === provider) && matches(s, query)));
   const pages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
   const rows = groups.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
@@ -30,6 +35,7 @@ export function Sessions({ sessions, provider, onProvider, now }) {
       <div className="chart-head">
         <h2>Sessions <span className="muted">· {sessions.length} in {groups.length} group{groups.length === 1 ? '' : 's'}</span></h2>
         <span className="spacer" />
+        <input type="search" className="search" placeholder="Search sessions" aria-label="Search sessions" value={query} onChange={e => { setPage(0); setQuery(e.target.value); }} />
         <Seg label="Provider" options={PROVIDERS} value={provider} onChange={p => { setPage(0); onProvider(p); }} />
       </div>
       <div className="table-wrap">
@@ -37,7 +43,7 @@ export function Sessions({ sessions, provider, onProvider, now }) {
           <table>
             <thead>
               <tr>
-                <th>Status</th><th>Provider</th><th>Project</th><th>Model</th><th>Last activity</th>
+                <th>Status</th><th>Provider</th><th>Project</th><th>Model</th><th>Last activity</th><th className="n">Time</th>
                 <th className="n">Input</th><th className="n">Cache read</th><th className="n">Cache write</th><th className="n">Output</th><th className="n">Total</th><th className="n" title="List-price estimate from Claude Code or Codex; not your subscription bill">Est. cost</th>
               </tr>
             </thead>
@@ -50,7 +56,7 @@ export function Sessions({ sessions, provider, onProvider, now }) {
               ))}
             </tbody>
           </table>
-        ) : <div className="empty">No sessions found.</div>}
+        ) : <div className="empty">{query ? `No sessions match “${query}”.` : 'No sessions found.'}</div>}
       </div>
       {groups.length > PAGE_SIZE && (
         <nav className="pager" aria-label="Sessions pages">

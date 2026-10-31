@@ -23,6 +23,9 @@ export function metricValue(t, metric) {
 }
 export const metricName = metric => (METRICS.find(m => m.value === metric) ?? METRICS[0]).name;
 export const providerName = p => p === 'codex' ? 'Codex' : 'Claude';
+export const duration = sec => { const s = Math.round(sec ?? 0); return s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round(s % 3600 / 60)}m` : s >= 60 ? `${Math.round(s / 60)}m` : `${s}s`; };
+// Search across what a session row shows: the first prompt, project and models.
+export const matches = (s, q) => !q || [s.prompt, s.project, ...s.models].some(v => v?.toLowerCase().includes(q.toLowerCase()));
 // Last folder of a project path (~/Desktop/relay-demo → relay-demo); the full path stays in the title.
 export const projectName = p => (p ?? '').replace(/\/+$/, '').split('/').pop() || p || '—';
 
@@ -103,6 +106,8 @@ export function groupSessions(sessions) {
     live: g.sessions.some(s => s.live),
     lastAt: g.sessions.reduce((a, s) => (!a || (s.lastAt ?? '') > a ? s.lastAt : a), null),
     models: [...new Set(g.sessions.flatMap(s => s.models))],
+    prompt: g.sessions.find(s => s.prompt)?.prompt ?? null,
+    activeSec: g.sessions.reduce((n, s) => n + (s.activeSec ?? 0), 0),
     tokens: Object.fromEntries(KEYS.map(k => [k, g.sessions.reduce((n, s) => n + (s.tokens[k] ?? 0), 0)])),
     costUSD: g.sessions.some(s => s.costUSD != null) ? g.sessions.reduce((n, s) => n + (s.costUSD ?? 0), 0) : null,
   })).sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? ''));

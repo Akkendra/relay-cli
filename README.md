@@ -112,14 +112,15 @@ A read-only page covering every Codex and Claude Code session on this machine, n
 
 - the plan-limit windows Codex reports (5-hour and weekly), with reset times;
 - tokens per day and per model, with or without cache reads, plus a table view;
-- every session, with live ones marked;
+- every session, with live ones marked, its first prompt, and its active time (gaps of up to 5 minutes between log entries), with a search box;
+- a **project picker** in the header that limits the agents, charts, sessions and runs to one folder (plan limits and the Codex account stay account-wide);
 - your **Codex account** across all devices: lifetime tokens, peak day, streaks, longest turn, and tokens per day, read through `codex app-server` (`account/usage/read`) so Codex handles sign-in. Relay asks at most once a minute, and these read-only calls spend no tokens;
 - Relay tasks found in those sessions' folders: status, steps, test result, and review tokens and cost.
 - your **setup** for each agent: plugins (on or off, version, and the skills, commands, agents, hooks, and MCP servers each brings), your own skills and agents, hooks, MCP server names, and memory files. Only names and counts are read, never settings values;
 
 **What it doesn't do:**
 
-- It reads only counts and metadata, never prompts or code.
+- It reads only counts and metadata, plus the first 100 characters of each session's first prompt (hidden if it looks like a credential). It never reads code or later messages.
 - It never guesses plan limits. Codex's come live from its app server (with the session logs as a fallback), and Claude's from `relay statusline` (see below).
 - The review cost shown is Claude's list-price estimate, not your subscription bill.
 - Both log formats are undocumented, so unreadable lines are counted in the footer rather than guessed at.
@@ -170,8 +171,7 @@ React and Vite are pinned dev dependencies used only for the build. `dist/` is g
 
 ## Limitations
 
-- One task per project. No automatic repairs, no token forecasting, no provider-session resumption.
-- The review sees only the diff, not unchanged files the diff depends on, and says so when it needs more context.
+- One task per project. No token forecasting.
 - Running AI tools on files sends their contents to those providers.
 - Tested on macOS with codex-cli 0.166 and Claude Code 2.1. Other platforms are untested.
 

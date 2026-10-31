@@ -1,7 +1,6 @@
 import { Fragment, useState } from 'react';
-import { ago, fmt, projectName, statusLevel, statusText } from '../format.js';
+import { ago, duration, fmt, projectName, statusLevel, statusText } from '../format.js';
 
-const duration = s => s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round(s % 3600 / 60)}m` : s >= 60 ? `${Math.round(s / 60)}m` : `${s}s`;
 // Build → Test → Review → Decision, each done, failed, or skipped, from the run's checkpoints.
 function stages(r) {
   const has = s => r.steps.some(x => x.step === s);

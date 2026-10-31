@@ -10,7 +10,7 @@ import { Runs } from './components/Runs.jsx';
 import { Board } from './components/Board.jsx';
 import { LatestRun } from './components/LatestRun.jsx';
 import { Clock, Core } from './components/Hud.jsx';
-import { METRICS, mergeLayout, metricName, metricValue } from './format.js';
+import { METRICS, mergeLayout, metricName, metricValue, projectName } from './format.js';
 import { usePersisted, useSummary } from './hooks.js';
 
 const SERIES = ['codex', 'claude'];
@@ -34,7 +34,8 @@ function Footer({ sources }) {
 }
 
 export function App() {
-  const { data, error } = useSummary();
+  const [project, setProject] = usePersisted('project', '');
+  const { data, error } = useSummary(project);
   // New keys so the All tokens / 7 days defaults apply once, even where older choices were saved.
   const [metric, setMetric] = usePersisted('metric.v2', 'all');
   const [range, setRange] = usePersisted('range.v2', '7');
@@ -61,6 +62,16 @@ export function App() {
         <a className="brand" href="/">Relay</a>
         <nav className="sections" aria-label="Sections"><a href="#w-agents">Overview</a><a href="#w-daily">Usage</a><a href="#sessions">Sessions</a><a href="#runs">Runs</a><a href="#setup">Setup</a></nav>
         <div className="tools">
+          {data && (
+            <select aria-label="Project" value={project} onChange={e => setProject(e.target.value)}>
+              <option value="">All projects</option>
+              {[...data.projects, ...(project && !data.projects.some(p => p.path === project) ? [{ path: project, sessions: 0 }] : [])]
+                .map((p, _, all) => <option key={p.path} value={p.path} title={p.path}>
+                  {/* Two folders with the same name show their parent too. */}
+                  {all.filter(o => projectName(o.path) === projectName(p.path)).length > 1 ? p.path.split('/').slice(-2).join('/') : projectName(p.path)} · {p.sessions}
+                </option>)}
+            </select>
+          )}
           <Clock />
           {editing && <button type="button" onClick={() => setLayout(DEFAULT_LAYOUT)}>Reset layout</button>}
           <button type="button" aria-pressed={editing} onClick={() => setEditing(v => !v)}>{editing ? 'Done' : 'Edit'}</button>

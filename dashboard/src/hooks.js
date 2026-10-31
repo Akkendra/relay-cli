@@ -12,7 +12,7 @@ export function usePersisted(key, initial) {
   return [value, set];
 }
 
-export function useSummary(intervalMs = 5000) {
+export function useSummary(project = '', intervalMs = 5000) {
   const [state, setState] = useState({ data: null, error: null });
   useEffect(() => {
     let alive = true, busy = false, timer;
@@ -21,7 +21,7 @@ export function useSummary(intervalMs = 5000) {
       if (document.hidden) { timer = setTimeout(tick, intervalMs); return; }
       busy = true;
       try {
-        const r = await fetch('/api/summary', { cache: 'no-store' });
+        const r = await fetch(project ? `/api/summary?project=${encodeURIComponent(project)}` : '/api/summary', { cache: 'no-store' });
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
         const data = await r.json();
         if (alive) setState({ data, error: null, at: Date.now() });
@@ -35,7 +35,7 @@ export function useSummary(intervalMs = 5000) {
     document.addEventListener('visibilitychange', onVisible);
     tick();
     return () => { alive = false; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); };
-  }, [intervalMs]);
+  }, [project, intervalMs]);
   return state;
 }
 
