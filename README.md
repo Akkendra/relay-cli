@@ -96,6 +96,7 @@ A read-only page covering every Codex and Claude Code session on this machine, n
 - every session, with live ones marked;
 - your **Codex account** across all devices: lifetime tokens, peak day, streaks, longest turn, and tokens per day, read through `codex app-server` (`account/usage/read`) so Codex handles sign-in. Relay asks at most once a minute, and these read-only calls spend no tokens;
 - Relay tasks found in those sessions' folders: status, steps, test result, and review tokens and cost.
+- your **setup** for each agent: plugins (on or off, version, and the skills, commands, agents, hooks, and MCP servers each brings), your own skills and agents, hooks, MCP server names, and memory files. Only names and counts are read, never settings values;
 
 **What it doesn't do:**
 

@@ -7,6 +7,7 @@ import { ModelBars } from './components/ModelBars.jsx';
 import { Sessions } from './components/Sessions.jsx';
 import { RelayTasks } from './components/RelayTasks.jsx';
 import { CodexAccount } from './components/CodexAccount.jsx';
+import { Setup } from './components/Setup.jsx';
 import { METRICS, metricName, metricValue } from './format.js';
 import { usePersisted, useSummary } from './hooks.js';
 
@@ -78,6 +79,7 @@ export function App() {
           </section>
           <Sessions sessions={data.sessions} provider={provider} onProvider={setProvider} now={now} />
           <RelayTasks relay={data.relay} />
+          <Setup catalog={data.catalog} />
           <Footer sources={data.sources} />
         </>
       )}

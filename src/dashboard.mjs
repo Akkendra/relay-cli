@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { summarize } from './usage.mjs';
 import { relayConfigDir } from './routing.mjs';
 import { accountCache, readCodexAccount } from './codex-account.mjs';
+import { readCatalog } from './catalog.mjs';
 
 // The React page is built with `npm run build:dashboard`; files are read per request so a rebuild needs no restart.
 const defaultDistDir = fileURLToPath(new URL('../dist/dashboard/', import.meta.url));
@@ -33,6 +34,7 @@ function staticFile(distDir, pathname) {
 export function startDashboard({ port = 4318, home = homedir(), configDir = relayConfigDir(), now = () => new Date(), allowHosts = [], distDir = defaultDistDir,
   readAccount = () => readCodexAccount() } = {}) {
   const account = accountCache({ read: readAccount });
+  const catalog = accountCache({ read: async () => readCatalog({ home }) });
   let hosts = new Set();
   const server = createServer((req, res) => {
     if (!hosts.has(String(req.headers.host ?? '').toLowerCase())) { res.writeHead(421, headers).end('Misdirected request'); return; }
@@ -40,7 +42,7 @@ export function startDashboard({ port = 4318, home = homedir(), configDir = rela
     const path = new URL(req.url, 'http://localhost').pathname;
     if (path === '/api/summary') {
       let body;
-      try { body = JSON.stringify(summarize({ home, configDir, now: now(), codexAccount: account.get() })); }
+      try { body = JSON.stringify({ ...summarize({ home, configDir, now: now(), codexAccount: account.get() }), catalog: catalog.get() }); }
       catch (e) { res.writeHead(500, { ...headers, 'Content-Type': 'application/json' }).end(JSON.stringify({ error: e.message })); return; }
       res.writeHead(200, { ...headers, 'Content-Type': 'application/json' }).end(body);
       return;
