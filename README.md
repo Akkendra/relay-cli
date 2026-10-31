@@ -100,7 +100,7 @@ Add your own patterns in `~/.config/relay/policy.json`, for example `{"block": {
 
 Relay sees actions as Codex reports them, so a blocked command may already have started; Codex's sandbox remains the hard boundary. After a halt, `/diff` shows what changed and `/undo` puts it back.
 
-The dashboard's **Runs** feed lists every Relay run across projects: outcome, models, tokens, duration, flags, and a Build → Test → Review → Decision bar. A row opens its steps, trace, and evidence (tests and review findings).
+The dashboard's **Runs** feed lists every Relay run across projects: the ask (a follow-up run shows `Follow-up: <text>`), outcome, models, tokens, duration, flags, and a Build → Test → Review → Decision bar. **Latest run** shows the newest one. A row opens its steps, trace, and evidence (tests and review findings).
 
 ## Usage dashboard
 
@@ -113,7 +113,7 @@ A read-only page covering every Codex and Claude Code session on this machine, n
 - the plan-limit windows Codex reports (5-hour and weekly), with reset times;
 - tokens per day and per model, with or without cache reads, plus a table view;
 - every session, with live ones marked, its first prompt, and its active time (gaps of up to 5 minutes between log entries), with a search box;
-- a **project picker** in the header that limits the agents, charts, sessions and runs to one folder (plan limits and the Codex account stay account-wide);
+- a **project picker** in the header that limits the agents, charts, sessions and runs to one folder (plan limits and the Codex account stay account-wide). It lists real project folders only: not your home folder, temp folders, or folders that no longer exist;
 - your **Codex account** across all devices: lifetime tokens, peak day, streaks, longest turn, and tokens per day, read through `codex app-server` (`account/usage/read`) so Codex handles sign-in. Relay asks at most once a minute, and these read-only calls spend no tokens;
 - Relay tasks found in those sessions' folders: status, steps, test result, and review tokens and cost.
 - your **setup** for each agent: plugins (on or off, version, and the skills, commands, agents, hooks, and MCP servers each brings), your own skills and agents, hooks, MCP server names, and memory files. Only names and counts are read, never settings values;

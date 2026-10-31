@@ -467,6 +467,7 @@ test('/continue sends a follow-up to the same Codex session without a new task',
   assert.deepEqual(args.slice(0, 2), ['exec', 'resume']); assert.equal(args.at(-2), 'thread-fake');
   assert.match(h.read('codex-prompt-2.txt'), /Follow-up from the user: make it blue/);
   assert.equal(h.saved().task.goal, 'add a banner'); assert.equal(h.saved().history.length, 1);
+  assert.equal(h.saved().task.run.ask, 'make it blue', 'the run remembers the follow-up that started it');
 });
 test('a plain line while the task has changes follows up on it by default', async t => {
   const h = runHarness(t);

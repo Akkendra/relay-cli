@@ -156,7 +156,7 @@ function runsFor(root, state) {
   return [...(state?.history ?? []), ...(state?.task ? [state.task] : [])].filter(t => t?.run).map(t => {
     const r = t.run, last = r.steps?.at(-1)?.at ?? r.startedAt, u = t.usage;
     return {
-      root, goal: String(t.goal ?? '').slice(0, 160), status: t.status, startedAt: r.startedAt, endedAt: last,
+      root, goal: String(r.ask ? `Follow-up: ${r.ask}` : t.goal ?? '').slice(0, 160), status: t.status, startedAt: r.startedAt, endedAt: last,
       durationSec: Math.max(0, Math.round((new Date(last) - new Date(r.startedAt)) / 1000)),
       build: t.routing?.build ? { model: t.routing.build.model, tier: t.routing.build.tier, tokens: t.routing.build.tokens?.total ?? null } : null,
       review: t.routing?.review ? { model: t.routing.review.model, tier: t.routing.review.tier, tokens: u ? (u.input_tokens ?? 0) + (u.output_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) : null } : null,
@@ -231,8 +231,10 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
   }
   for (const file of cache.keys()) if (!seen.has(file)) cache.delete(file);
   const latestCodexLimits = sessions.filter(s => s.limits).sort((a, b) => a.limits.observedAt < b.limits.observedAt ? 1 : -1)[0]?.limits ?? null;
+  // The picker lists real projects: not the home folder, temp folders (test runs, scratch) or folders since deleted.
+  const isProject = cwd => short(cwd) !== '~' && !/^\/(private\/)?(tmp|var\/folders)\//.test(short(cwd)) && existsSync(cwd);
   const counts = new Map();
-  for (const s of sessions) if (s.cwd) counts.set(short(s.cwd), (counts.get(short(s.cwd)) ?? 0) + 1);
+  for (const s of sessions) if (s.cwd && isProject(s.cwd)) counts.set(short(s.cwd), (counts.get(short(s.cwd)) ?? 0) + 1);
   const projects = [...counts].map(([path, sessions]) => ({ path, sessions })).sort((a, b) => b.sessions - a.sessions || a.path.localeCompare(b.path));
   if (project) sessions.splice(0, Infinity, ...sessions.filter(s => short(s.cwd) === project));
 

@@ -635,7 +635,8 @@ export async function runAll(root, state, deps, { mode = 'exec', followUp, image
   const policy = loadPolicy(deps.env);
   deps = { ...deps, policy, allowCode: deps.allowCode ?? consentOnce(deps.confirm) };
   let round = 0, last = null;
-  task.run = { id: randomUUID(), startedAt: new Date().toISOString(), steps: [], tests: null, trace: [], flags: [], policyHash: policy.hash };
+  // ask: the follow-up that started this run, so the runs feed shows the latest ask rather than the task's first one.
+  task.run = { id: randomUUID(), startedAt: new Date().toISOString(), ask: followUp ? followUp.slice(0, 500) : null, steps: [], tests: null, trace: [], flags: [], policyHash: policy.hash };
   checkpoint(root, state, 'started');
   try {
     if (followUp) await stage('fix', () => runFix(root, state, deps, { kind: 'user', text: followUp, images }));
