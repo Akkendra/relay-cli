@@ -327,3 +327,27 @@ for (const [text, question] of [['where is the site hosted', true], ['How do I r
     assert.equal(isQuestion(text), question);
   });
 }
+test('/undo puts back only the task\'s changes, and /diff lists them', async t => {
+  const { root, git } = fixture(t);
+  writeFileSync(join(root, 'mine.txt'), 'already here\n'); writeFileSync(join(root, '.gitignore'), 'secret.env\n');
+  const task = createTask(root, 'edit things');
+  writeFileSync(join(root, 'app.txt'), 'changed by task\n'); writeFileSync(join(root, 'added.txt'), 'new\n');
+  writeFileSync(join(root, 'secret.env'), 'ignored, keep me');
+  const { taskChanges } = await import('../src/relay.mjs');
+  assert.deepEqual(taskChanges(root, task).files, [{ status: 'A', path: 'added.txt' }, { status: 'M', path: 'app.txt' }]);
+  const logs = [], lines = ['/diff', '/undo', '/diff', '/quit'];
+  const original = console.log; console.log = (...a) => logs.push(a.join(' '));
+  try { await main([], root, { isTTY: true, env: { HOME: root }, confirm: async () => true, readLine: async () => lines.shift() ?? null }); }
+  finally { console.log = original; }
+  assert.ok(logs.some(l => l.includes('M app.txt') && l.includes('A added.txt')));
+  assert.equal(readFileSync(join(root, 'app.txt'), 'utf8'), 'before\n'); assert.ok(!existsSync(join(root, 'added.txt')));
+  assert.equal(readFileSync(join(root, 'mine.txt'), 'utf8'), 'already here\n', 'files from before the task stay');
+  assert.ok(existsSync(join(root, 'secret.env')), 'ignored files stay');
+  assert.equal(git('diff', '--cached', '--name-only').toString(), '', 'the index is untouched');
+  assert.ok(logs.includes('The current task has no changes.'));
+});
+test('Tab completes slash commands', async () => {
+  const { complete } = await import('../src/cli.mjs');
+  assert.deepEqual(complete('/st'), [['/status'], '/st']); assert.deepEqual(complete('/'), [complete('/')[0], '/']);
+  assert.ok(complete('/').length && complete('/')[0].includes('/undo')); assert.deepEqual(complete('add a'), [[], 'add a']);
+});

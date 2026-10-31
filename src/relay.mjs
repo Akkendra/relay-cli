@@ -85,6 +85,27 @@ function reviewDiff(root, task) {
     return { untracked, diff: git(root, ['diff', '--no-ext-diff', '--no-textconv', '--binary', task.base, '--', '.', ':!.relay'], env) };
   });
 }
+// What the current task changed, and putting it back: files are restored from the task's baseline snapshot and
+// files it added are deleted. Ignored files and files that already existed untouched are left alone.
+export function taskChanges(root, task) {
+  const { diff } = reviewDiff(root, task);
+  const files = withScratchIndex(root, env => {
+    const untracked = git(root, ['ls-files', '--others', '--exclude-standard', '-z'], env).split('\0').filter(Boolean);
+    if (untracked.length) git(root, ['add', '--intent-to-add', '--', ...untracked], env);
+    const parts = git(root, ['diff', '--name-status', '--no-renames', '-z', task.base, '--', '.', ':!.relay'], env).split('\0').filter(Boolean);
+    const out = [];
+    for (let i = 0; i < parts.length; i += 2) out.push({ status: parts[i], path: parts[i + 1] });
+    return out;
+  });
+  return { diff, files };
+}
+export function undoTask(root, task) {
+  const { files } = taskChanges(root, task);
+  const restore = files.filter(f => f.status !== 'A').map(f => f.path);
+  for (const f of files) if (f.status === 'A') rmSync(join(root, f.path), { force: true });
+  if (restore.length) withScratchIndex(root, env => git(root, ['checkout', task.base, '--', ...restore], env));
+  return files;
+}
 function sha256(text) { return createHash('sha256').update(text).digest('hex'); }
 function diffHash(root, task) { return sha256(reviewDiff(root, task).diff); }
 export function reviewPacket(root, task, { node = 'not recorded', tests = 'Not run by Relay.' } = {}) {
@@ -222,8 +243,8 @@ function runTests(root, deps) {
 }
 // One readline per question, so Codex's own terminal UI (/interactive) can take over stdin in between.
 // Resolves null on Ctrl-C or Ctrl-D, which callers treat as "cancel" or "no".
-export function answer(question) {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+export function answer(question, { history, completer } = {}) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout, history, completer, historySize: 200 });
   return new Promise(resolve => {
     let settled = false;
     const finish = value => { if (!settled) { settled = true; resolve(value); } rl.close(); };
@@ -423,7 +444,7 @@ export async function runAll(root, state, deps, { mode = 'exec' } = {}) {
 }
 export async function main(args, cwd = process.cwd(), overrides = {}) {
   // Overrides exist so tests can supply fake provider processes and answers; the CLI uses the defaults.
-  const deps = { env: process.env, home: homedir(), isTTY: process.stdin.isTTY, confirm: ask, choose: answer, readLine: answer, output: process.stdout, testTimeout: 600000, ...overrides };
+  const deps = { env: process.env, home: homedir(), isTTY: process.stdin.isTTY, confirm: ask, choose: answer, output: process.stdout, testTimeout: 600000, ...overrides };
   const [command = deps.isTTY ? 'repl' : 'status', ...rest] = args;
   if (command === 'repl') { await repl(cwd, deps); return; }
   if (command === 'doctor') {

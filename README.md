@@ -43,7 +43,7 @@ relay> Create formatDuration(minutes). Acceptance: 0 -> '0m', 65 -> '1h 5m'; rej
 
 | Command | What it does |
 |---|---|
-| `relay` | Opens the interactive prompt. Each line you type is a task; `/help` lists `/status`, `/history`, `/models`, `/interactive <task>`, and `/quit`. |
+| `relay` | Opens the interactive prompt. Each line you type is a task; `/help` lists `/status`, `/diff`, `/undo`, `/history`, `/models`, `/ask`, `/task`, `/interactive <task>`, and `/quit`. Up-arrow recalls earlier lines and Tab completes commands. |
 | `relay doctor` | Shows the Node, git, `codex`, and `claude` versions. It doesn't check sign-in. |
 | `relay init` | Creates `.relay/` in the current git repo and excludes it locally through `.git/info/exclude`. |
 | `relay task "<goal and acceptance criteria>"` | Records a task. Its baseline is a snapshot of the current files, so the tree needn't be clean; the earlier task moves to history. |

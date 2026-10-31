@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { answerQuestion, createTask, initialize, projectRoot, readState, locked, runAll, requireSubscriptionEnvironment } from './relay.mjs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { answer, answerQuestion, createTask, initialize, projectRoot, readState, locked, runAll, requireSubscriptionEnvironment, taskChanges, undoTask } from './relay.mjs';
 import { loadModels } from './routing.mjs';
 
 // `relay` with no arguments: a prompt where each line is a task. Codex runs inside it, then tests (with consent),
@@ -10,6 +12,8 @@ const HELP = `Type a task and press Enter. Codex builds it, Relay asks before ru
 and you can ask for fixes until you're done. Nothing is committed or pushed.
 
   /status              the current task: status, models, tokens
+  /diff                what the current task changed
+  /undo                put the current task's changes back (asks first)
   /history             earlier tasks in this folder
   /models              which models each tier uses (~/.config/relay/models.json)
   /ask <question>      answer a question read-only (also automatic for lines ending in ? or starting with where/what/why/how…)
@@ -40,10 +44,24 @@ async function findProject(cwd, deps) {
   return projectRoot(cwd);
 }
 
+const COMMANDS = ['/ask', '/diff', '/help', '/history', '/interactive', '/models', '/quit', '/status', '/task', '/undo'];
+export const complete = line => [line.startsWith('/') ? COMMANDS.filter(c => c.startsWith(line)) : [], line];
+// Up-arrow history, kept per project in .relay (which git ignores).
+function promptHistory(root) {
+  const file = join(root, '.relay', 'prompt-history.json');
+  let lines = [];
+  try { lines = JSON.parse(readFileSync(file, 'utf8')); } catch {}
+  return {
+    read: question => answer(question, { history: [...lines], completer: complete }),
+    add(line) { lines = [line, ...lines.filter(l => l !== line)].slice(0, 200); try { writeFileSync(file, JSON.stringify(lines), { mode: 0o600 }); } catch {} },
+  };
+}
+
 export async function repl(cwd, deps) {
   const root = await findProject(cwd, deps);
   if (!root) return;
   initialize(root);
+  const history = promptHistory(root), readLine = deps.readLine ?? history.read;
   const models = loadModels(deps.env);
   console.log(`Relay · ${tilde(root)}`);
   console.log(`Models by task size: Codex ${models.codex.small.model} / ${models.codex.medium.model} / ${models.codex.large.model} · Claude ${models.claude.small.model} / ${models.claude.medium.model} / ${models.claude.large.model}`);
@@ -51,16 +69,32 @@ export async function repl(cwd, deps) {
   if (current) console.log(`Last task: ${describeTask(current).split('\n')[0]}`);
   console.log('Type a task, or /help.');
   for (;;) {
-    const line = await deps.readLine('relay> ');
+    const line = await readLine('relay> ');
     if (line === null) { console.log('Bye.'); return; }
     const input = line.trim();
     if (!input) continue;
+    history.add(input);
     const [command, ...rest] = input.split(/\s+/);
     try {
       if (command === '/quit' || command === '/exit') { console.log('Bye.'); return; }
       else if (command === '/help') console.log(HELP);
       else if (command === '/status') { const t = readState(root).task; console.log(t ? describeTask(t) : 'No task yet. Type one.'); }
-      else if (command === '/history') {
+      else if (command === '/diff' || command === '/undo') {
+        const t = readState(root).task;
+        const { diff, files } = t ? taskChanges(root, t) : { diff: '', files: [] };
+        if (!files.length) console.log('The current task has no changes.');
+        else if (command === '/diff') {
+          const lines = diff.split('\n');
+          console.log(files.map(f => `${f.status} ${f.path}`).join('\n'));
+          console.log(lines.length > 400 ? `${lines.slice(0, 400).join('\n')}\n… ${lines.length - 400} more lines (git diff shows the rest)` : diff);
+        } else {
+          console.log(files.map(f => `${f.status === 'A' ? 'delete ' : 'restore'} ${f.path}`).join('\n'));
+          if (await deps.confirm(`Put back these ${files.length} file${files.length === 1 ? '' : 's'}? [y/N] `)) {
+            await locked(root, async () => { undoTask(root, t); });
+            console.log('Done. The files are back to how they were when the task started.');
+          }
+        }
+      } else if (command === '/history') {
         const s = readState(root), all = [...(s.history ?? []), ...(s.task ? [s.task] : [])];
         console.log(all.length ? all.map((t, i) => `${i + 1}. ${describeTask(t)}`).join('\n') : 'No tasks yet.');
       } else if (command === '/models') {
