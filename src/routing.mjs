@@ -43,6 +43,8 @@ export function loadModels(env = process.env) {
   for (const provider of ['codex', 'claude']) {
     models[provider] = Object.fromEntries(TIERS.map(t => [t, pick(provider, DEFAULT_MODELS[provider][t], custom[provider]?.[t])]));
   }
+  // Opt-in: lets Codex builds open local ports (dev servers, browser checks). It also allows outbound network.
+  models.codexNetwork = custom.codexNetwork === true;
   return models;
 }
 

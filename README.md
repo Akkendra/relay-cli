@@ -80,6 +80,7 @@ Relay sizes each task so small work goes to cheaper models and complex work to b
 - **Limits are respected.** Before each build and review, Relay reads the live limits (Codex from its app server, Claude from `relay statusline`). At 80% of either window the provider is capped at medium, and at 90% at small. The plan shows the reason, and you can still bump the build up with `b`.
 - **Usage is recorded.** Each task saves its tiers, which model chose them (rules, classifier, or you), and the build's tokens, read from Codex's session log. The dashboard shows them on the task's card.
 - **Model names can be overridden** in `~/.config/relay/models.json`, for example `{"codex": {"small": {"model": "gpt-6-luna", "effort": "low"}}}`. Names and effort levels are validated, so a typo can't become a CLI flag.
+- **Local ports for Codex (opt-in).** Codex's sandbox blocks network by default, so a build can't start a dev server. Add `"codexNetwork": true` to `~/.config/relay/models.json` to let builds and fixes open local ports; this also allows outbound network. Read-only questions never get it.
 
 Codex sends its own instructions with every call (about 15K mostly cached input tokens, even for a one-word reply). That fixed cost limits how much a small model can save on tiny tasks.
 
