@@ -2,14 +2,15 @@ import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { answer, answerQuestion, attachedLine, createTask, prepareAsk, initialize, projectRoot, readState, locked, runAll, requireSubscriptionEnvironment, taskChanges, undoTask } from './relay.mjs';
+import { answer, answerQuestion, attachedLine, createTask, launchApp, prepareAsk, initialize, projectRoot, readState, locked, runAll, requireSubscriptionEnvironment, taskChanges, undoTask } from './relay.mjs';
 import { loadModels } from './routing.mjs';
 
 // `relay` with no arguments: a prompt where each line is a task. Codex runs inside it, then tests (with consent),
-// the Claude review, and fixes in the same Codex session, all without leaving the prompt.
+// the Claude review, and automatic fixes in the same Codex session, all without leaving the prompt.
 
-const HELP = `Type a task and press Enter. Codex builds it, Relay asks before running npm test, Claude reviews it,
-and you can ask for fixes until you're done. Nothing is committed or pushed.
+const HELP = `Type a task and press Enter. Codex builds it, Relay asks once before running project code, Claude reviews it,
+and Codex fixes the findings until Claude has none left; then the app starts. Nothing is committed or pushed.
+While a task has changes, a new line asks whether it follows up on that task or starts a new one.
 
   /status              the current task: status, models, tokens
   /diff                what the current task changed
@@ -19,6 +20,7 @@ and you can ask for fixes until you're done. Nothing is committed or pushed.
   /history             earlier tasks in this folder
   /models              which models each tier uses (~/.config/relay/models.json)
   /continue <text>     follow up on the current task in the same Codex session
+  /run                 start the app (dev/start script, or index.html)
   /ask <question>      answer a question read-only (also automatic for lines ending in ? or starting with where/what/why/how…)
   /task <text>         run the line as a task even if it reads like a question
   /interactive <task>  run a task in Codex's own window, with its approval prompts
@@ -47,7 +49,7 @@ async function findProject(cwd, deps) {
   return projectRoot(cwd);
 }
 
-const COMMANDS = ['/ask', '/continue', '/diff', '/help', '/history', '/interactive', '/models', '/quit', '/review', '/status', '/task', '/undo', '/verbose'];
+const COMMANDS = ['/ask', '/continue', '/diff', '/help', '/history', '/interactive', '/models', '/quit', '/review', '/run', '/status', '/task', '/undo', '/verbose'];
 export const complete = line => [line.startsWith('/') ? COMMANDS.filter(c => c.startsWith(line)) : [], line];
 // Up-arrow history, kept per project in .relay (which git ignores).
 function promptHistory(root) {
@@ -114,13 +116,16 @@ export async function repl(cwd, deps) {
         const t = readState(root).task;
         if (!rest.length) console.log('Usage: /continue <what to change>');
         else if (!t?.routing?.build) console.log('No task to continue yet. Type a task first.');
-        else { requireSubscriptionEnvironment(deps.env); const a = intake(root, rest.join(' ')); await locked(root, () => runAll(root, readState(root), deps, { followUp: a.text, images: a.images })); }
+        else await continueTask(root, rest.join(' '), deps);
+      } else if (command === '/run') {
+        await launchApp(root, { ...deps, allowCode: async () => deps.confirm(`Run this project's dev/start script in ${root}? [y/N] `) });
       } else if (command === '/ask' || command === '/task') {
         if (!rest.length) console.log(`Usage: ${command} <text>`);
         else if (command === '/ask') await ask(root, rest.join(' '), deps);
         else await runTask(root, rest.join(' '), deps, 'exec');
       } else if (command.startsWith('/')) console.log(`Unknown command ${command}. Type /help.`);
       else if (isQuestion(input)) await ask(root, input, deps);
+      else if (await followsUp(root, deps)) await continueTask(root, input, deps);
       else await runTask(root, input, deps, 'exec');
     } catch (e) {
       console.log(`✖ ${e.message}`);
@@ -136,6 +141,19 @@ async function ask(root, question, deps) {
 }
 // Word limit and attachments for anything typed at the prompt.
 function intake(root, text) { const a = prepareAsk(root, text); if (attachedLine(a)) console.log(attachedLine(a)); return a; }
+// A line typed while the current task has changes is usually about that task, so following up is the default.
+async function followsUp(root, deps) {
+  const t = readState(root).task;
+  if (!t?.routing?.build || !taskChanges(root, t).files.length) return false;
+  const a = await deps.choose('[Enter] follow up on the current task · [n] new task ');
+  if (a === null) throw new Error('Cancelled; nothing was started.');
+  return a.trim().toLowerCase() !== 'n';
+}
+async function continueTask(root, text, deps) {
+  requireSubscriptionEnvironment(deps.env);
+  const a = intake(root, text);
+  await locked(root, () => runAll(root, readState(root), deps, { followUp: a.text, images: a.images }));
+}
 async function runTask(root, goal, deps, mode) {
   requireSubscriptionEnvironment(deps.env);
   const a = intake(root, goal);
