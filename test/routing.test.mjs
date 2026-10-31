@@ -66,3 +66,6 @@ test('Codex network access is opt-in and only widens the workspace-write sandbox
   assert.ok(!execArgs(c).includes(flag));
   assert.ok(!execArgs(c, { network: true, sandbox: 'read-only' }).includes(flag), 'read-only questions never get network');
 });
+test('rebuilding a whole site is never routed to the small tier', () => {
+  assert.notEqual(planBuild('delete the entire site and rebuild it with react, nodejs', { models: DEFAULT_MODELS, trackedFiles: 10 }).tier, 'small');
+});

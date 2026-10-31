@@ -41,3 +41,7 @@ test('sessions of the same agent and project fold into one summary row', async (
   const groups = groupSessions([s('claude', '~/a', '2026-10-30', 10), s('claude', '~/a', '2026-10-31', 5, true), s('codex', '~/a', '2026-10-29', 7)]);
   assert.deepEqual(groups.map(g => [g.provider, g.sessions.length, g.tokens.total, g.live, g.lastAt, g.costUSD]), [['claude', 2, 15, true, '2026-10-31', 2], ['codex', 1, 7, false, '2026-10-29', 1]]);
 });
+test('project names are the last folder of the path', async () => {
+  const { projectName } = await import('../dashboard/src/format.js');
+  assert.deepEqual(['~/Desktop/relay-demo', '/private/tmp/x/', '~', null].map(projectName), ['relay-demo', 'x', '~', '—']);
+});

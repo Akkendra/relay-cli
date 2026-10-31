@@ -79,6 +79,7 @@ if (args[0] === 'exec') {
   out({ type: 'item.started', item: { type: 'command_execution', command: 'npm test' } });
   if (process.env.FAKE_CODEX_TOUCH) out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: process.env.FAKE_CODEX_TOUCH, kind: 'update' }] } });
   if (process.env.FAKE_CODEX_CMD) { out({ type: 'item.started', item: { type: 'command_execution', command: process.env.FAKE_CODEX_CMD } }); fs.writeFileSync(log('codex-waiting'), '1'); require('child_process').execSync('sleep 5'); fs.writeFileSync(log('codex-finished'), '1'); }
+  if (process.env.FAKE_CODEX_LOCK) fs.writeFileSync('package-lock.json', JSON.stringify({ packages: { x: 'y'.repeat(150000) } }));
   if (process.env.FAKE_CODEX_SECRET) fs.writeFileSync('config.js', 'export const key = ' + JSON.stringify(process.env.FAKE_CODEX_SECRET) + ';\\n');
   if (!process.env.FAKE_CODEX_NOOP) fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
   out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: file, kind: 'add' }] } });
@@ -406,6 +407,7 @@ test('reviews get imported files as context and quotes are checked against the d
   const { unverifiedQuotes } = await import('../src/relay.mjs');
   assert.deepEqual(unverifiedQuotes('Bug at `export const line = () => total();` and `throw new Error(oops)`; see `src/cart.js`', packet.diff), ['throw new Error(oops)']);
   assert.deepEqual(unverifiedQuotes('Covers only `cart.js` logic (5 tests). The `disabled` attribute and `throw new Error(oops)`', packet.diff), ['throw new Error(oops)'], 'short spans keep backticks paired; bare names are not quotes');
+  assert.deepEqual(unverifiedQuotes('See `export const line = ... total();` and `total(); ... export const`', packet.diff), ['total(); ... export const'], 'elided quotes match when their parts appear in order');
 });
 test('a likely secret in the diff blocks the review before anything is sent to Claude', async t => {
   // Built at runtime so the repository never contains a key-shaped literal.
@@ -445,4 +447,39 @@ test('flagged actions are recorded without stopping the run, and show in the run
   writeFileSync(join(fakeSession, 'r.jsonl'), JSON.stringify({ timestamp: new Date().toISOString(), type: 'session_meta', payload: { id: 's1', cwd: h.root, timestamp: new Date().toISOString() } }) + '\n');
   const [run] = summarize({ home: h.home }).runs;
   assert.equal(run.status, 'needs_human_decision'); assert.equal(run.flags.length, 1); assert.ok(run.trace.length > 0); assert.ok(run.build.model);
+});
+test('asks are capped at 2500 words and attach text files and images by path', async t => {
+  const { prepareAsk, execArgs } = await import('../src/relay.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'relay-ask-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.throws(() => prepareAsk(root, 'word '.repeat(2501)), /2501 words; the limit is 2500/);
+  assert.equal(prepareAsk(root, 'word '.repeat(2500)).text.length, 'word '.repeat(2500).length);
+  mkdirSync(join(root, 'My Notes'));
+  writeFileSync(join(root, 'My Notes', 'spec.md'), 'Promo SCOOP10 applies once.');
+  writeFileSync(join(root, 'shot.png'), 'png');
+  writeFileSync(join(root, 'creds.txt'), 'api_key = "abcdefghijklmnop"');
+  const a = prepareAsk(root, 'Build it per @My\\ Notes/spec.md and match ./shot.png.');
+  assert.deepEqual(a.files, ['My Notes/spec.md']);
+  assert.deepEqual(a.images, [join(root, 'shot.png')], 'trailing punctuation is ignored');
+  assert.match(a.text, /ATTACHED FILE My Notes\/spec\.md\nPromo SCOOP10 applies once\./);
+  assert.deepEqual(prepareAsk(root, 'add/remove items, see src/missing.js').files, [], 'words with slashes that are not files stay text');
+  assert.throws(() => prepareAsk(root, '@creds.txt'), /looks like it holds a credential/);
+  assert.deepEqual(execArgs({ model: 'm', effort: 'low' }, { images: ['/a.png'] }).slice(0, 4), ['exec', '--image', '/a.png', '--json']);
+});
+test('lockfiles stay out of the reviewed diff and runs print a short summary', async t => {
+  const h = runHarness(t, { env: { FAKE_CODEX_LOCK: '1' } });
+  const out = []; h.deps.output = { write: s => out.push(String(s)) };
+  await h.run();
+  const packet = h.read('claude-input.txt');
+  assert.doesNotMatch(packet, /y{1000}/, 'the 150 KB lockfile is not sent');
+  assert.match(packet, /GENERATED LOCKFILES CHANGED[^\n]*\npackage-lock\.json/);
+  assert.equal(h.state().status, 'needs_human_decision', 'the review ran despite the big lockfile');
+  const text = out.join('');
+  assert.match(text, /npm test passed/); assert.doesNotMatch(text, /tests ok: 3 passed/, 'test output is summarized, not streamed');
+});
+test('review summary keeps findings and counts the missing-context points', async () => {
+  const { reviewSummary } = await import('../src/relay.mjs');
+  const r = '## Findings\n1. Bug in `x()`.\n\n## Missing context / evidence\n- a\n- b\n\n## Suggested next action\nFix it.';
+  assert.equal(reviewSummary(r), '## Findings\n1. Bug in `x()`.\n\n## Suggested next action\nFix it.\n\n(2 missing-context points left out; /review shows the full review.)');
+  assert.equal(reviewSummary('Findings: one possible bug.'), 'Findings: one possible bug.');
 });

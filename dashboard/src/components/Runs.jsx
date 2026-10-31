@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { ago, fmt, statusLevel, statusText } from '../format.js';
+import { ago, fmt, projectName, statusLevel, statusText } from '../format.js';
 
 const duration = s => s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round(s % 3600 / 60)}m` : s >= 60 ? `${Math.round(s / 60)}m` : `${s}s`;
 // Build → Test → Review → Decision, each done, failed, or skipped, from the run's checkpoints.
@@ -40,7 +40,7 @@ export function Runs({ runs, now }) {
             <Fragment key={key}>
               <tr className="clickable" onClick={() => setOpen(open === key ? null : key)} aria-expanded={open === key}>
                 <td title={r.startedAt}>{ago(r.startedAt, now)}</td>
-                <td className="project">{r.root}</td>
+                <td className="project" title={r.root}>{projectName(r.root)}</td>
                 <td className="project" title={r.goal}>{r.goal}</td>
                 <td>{[r.build?.model, r.review?.model].filter(Boolean).join(' → ') || '—'}</td>
                 <td className="n">{fmt((r.build?.tokens ?? 0) + (r.review?.tokens ?? 0))}</td>

@@ -74,7 +74,7 @@ export function App() {
             agents: { title: 'Agents', render: () => <Core sessions={data.sessions} today={data.daily.at(-1)} hourly={data.hourly} now={now} /> },
             latest: { title: 'Latest run', render: () => <LatestRun runs={data.runs} now={now} /> },
             limits: { title: 'Plan limits', render: () => <Limits limits={data.limits} now={now} /> },
-            codex: { title: 'Codex · all devices', render: () => <CodexAccount account={data.codexAccount} now={now} /> },
+            codex: { title: 'Codex · all devices', render: () => <CodexAccount account={data.codexAccount} now={now} localToday={data.daily.at(-1)?.codex?.total} /> },
             claude: { title: 'Claude · this Mac', render: () => <CodexAccount provider="claude" account={data.claudeAccount} now={now} /> },
             daily: { title: 'Tokens per day', render: () => (
               <div className="card">
