@@ -6,8 +6,9 @@ import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
 import { homedir } from 'node:os';
 import { startDashboard } from './dashboard.mjs';
-import { DEFAULT_MODELS, loadModels, planBuild, planReview, shiftTier, diffStats, classifierArgs } from './routing.mjs';
-import { findCodexSession, codexUsageTokens } from './usage.mjs';
+import { DEFAULT_MODELS, loadModels, planBuild, planReview, shiftTier, diffStats, classifierArgs, capForLimits, relayConfigDir } from './routing.mjs';
+import { findCodexSession, codexUsageTokens, claudeLimits } from './usage.mjs';
+import { readCodexAccount } from './codex-account.mjs';
 import { runStatusline } from './statusline.mjs';
 import { repl } from './cli.mjs';
 
@@ -286,6 +287,8 @@ async function chooseBuild(root, task, deps) {
   const models = loadModels(deps.env);
   const trackedFiles = git(root, ['ls-files', '-z']).split('\0').filter(Boolean).length;
   const plan = planBuild(task.goal, { env: deps.env, models, trackedFiles, classify: deps.classify });
+  const capped = capForLimits(plan.tier, (await deps.limits()).codex, 'Codex');
+  if (capped.note) { plan.tier = capped.tier; plan.reasons.push(capped.note); }
   let tier = plan.tier;
   for (;;) {
     console.log(`Build: Codex ${describe({ tier, ...models.codex[tier] })}${tier === plan.tier ? ` — ${plan.source}: ${plan.reasons.join('; ')}` : ' — your choice'}`);
@@ -359,6 +362,8 @@ function runReview(root, state, deps, evidence, expectedHash) {
   const packet = reviewPacket(root, task, evidence);
   if (expectedHash) requireUnchanged(state, expectedHash, packet.hash, 'before review');
   const plan = planReview(packet.stats);
+  const capped = capForLimits(plan.tier, deps.claudeLimits(), 'Claude');
+  if (capped.note) { plan.tier = capped.tier; plan.reasons.push(capped.note); }
   const choice = { tier: plan.tier, ...loadModels(deps.env).claude[plan.tier], reasons: plan.reasons };
   task.routing = { ...task.routing, review: choice };
   console.log(`Review: Claude ${describe(choice)} — ${plan.reasons.join('; ')}`);
@@ -470,7 +475,9 @@ export async function runAll(root, state, deps, { mode = 'exec' } = {}) {
 }
 export async function main(args, cwd = process.cwd(), overrides = {}) {
   // Overrides exist so tests can supply fake provider processes and answers; the CLI uses the defaults.
-  const deps = { env: process.env, home: homedir(), isTTY: process.stdin.isTTY, confirm: ask, choose: answer, output: process.stdout, testTimeout: 600000, ...overrides };
+  const deps = { env: process.env, home: homedir(), isTTY: process.stdin.isTTY, confirm: ask, choose: answer, output: process.stdout, testTimeout: 600000,
+    limits: async () => ({ codex: (await readCodexAccount({ env: overrides.env ?? process.env, timeoutMs: 8000 })).limits ?? null }),
+    claudeLimits: () => claudeLimits(relayConfigDir(overrides.env ?? process.env)), ...overrides };
   const [command = deps.isTTY ? 'repl' : 'status', ...rest] = args;
   if (command === 'repl') { await repl(cwd, deps); return; }
   if (command === 'doctor') {

@@ -142,7 +142,7 @@ function relayTask(root, sessions) {
 }
 
 // Claude plan limits come from `relay statusline` (see statusline.mjs); windows past their reset time are dropped.
-function claudeLimits(configDir, now) {
+export function claudeLimits(configDir, now = new Date()) {
   const saved = readJson(join(configDir, 'claude-limits.json'));
   if (!saved?.observedAt) return null;
   const live = w => w && Number.isFinite(w.usedPercent) && (!w.resetsAt || new Date(w.resetsAt) > now) ? w : null;

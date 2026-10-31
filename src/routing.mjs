@@ -118,4 +118,15 @@ export function planReview(stats) {
   return { tier: 'medium', reasons };
 }
 
+// Near a plan limit, cheaper tiers stretch what's left: at 80% of either window cap at medium, at 90% at small.
+export function capForLimits(tier, limits, name) {
+  const windows = [limits?.primary, limits?.secondary].filter(w => Number.isFinite(w?.usedPercent));
+  if (!windows.length) return { tier, note: null };
+  const worst = windows.reduce((a, b) => (b.usedPercent > a.usedPercent ? b : a));
+  const cap = worst.usedPercent >= 90 ? 'small' : worst.usedPercent >= 80 ? 'medium' : 'large';
+  if (TIERS.indexOf(tier) <= TIERS.indexOf(cap)) return { tier, note: null };
+  const window = worst.windowMinutes === 10080 ? 'weekly' : '5-hour';
+  return { tier: cap, note: `${name} is at ${Math.round(worst.usedPercent)}% of its ${window} limit, so capped at ${cap}` };
+}
+
 export function shiftTier(tier, step) { return TIERS[Math.min(TIERS.length - 1, Math.max(0, TIERS.indexOf(tier) + step))]; }

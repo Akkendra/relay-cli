@@ -77,6 +77,7 @@ Relay sizes each task so small work goes to cheaper models and complex work to b
 
 - **Build tier, before Codex starts.** Relay scores the task locally, for free, from its length, the number of acceptance criteria, signal words ("refactor", "security" vs "typo", "docs"), and repo size. Only borderline scores get a second opinion from Claude Haiku, which costs about 1–2K tokens and runs with no tools. You see the plan and press Enter to run it, `b` or `s` to go one tier bigger or smaller, or `q` to cancel.
 - **Review tier, after the build,** based on what actually changed: up to 60 lines in at most 3 files is small, over 600 lines or 15 files is large. Changes to auth, payments, secrets, workflows, `package.json`, or `.env*` always get the large reviewer.
+- **Limits are respected.** Before each build and review, Relay reads the live limits (Codex from its app server, Claude from `relay statusline`). At 80% of either window the provider is capped at medium, and at 90% at small. The plan shows the reason, and you can still bump the build up with `b`.
 - **Usage is recorded.** Each task saves its tiers, which model chose them (rules, classifier, or you), and the build's tokens, read from Codex's session log. The dashboard shows them on the task's card.
 - **Model names can be overridden** in `~/.config/relay/models.json`, for example `{"codex": {"small": {"model": "gpt-6-luna", "effort": "low"}}}`. Names and effort levels are validated, so a typo can't become a CLI flag.
 

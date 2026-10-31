@@ -109,7 +109,7 @@ if (mode === 'badjson') { console.log('not json'); process.exit(0); }
 console.log(JSON.stringify({ is_error: mode === 'is_error', result: 'Findings: one possible bug.', usage: null }));`,
 };
 function runHarness(t, { env = {}, answer = true, omit = [], packageJson = { scripts: { test: 'node --test' } }, beforeAnswer = () => {},
-  goal = 'Add feature; test it', choices = [], classify } = {}) {
+  goal = 'Add feature; test it', choices = [], classify, limits = {} } = {}) {
   const { root, git } = fixture(t);
   if (packageJson) { writeFileSync(join(root, 'package.json'), JSON.stringify(packageJson)); git('add', '.'); git('commit', '-m', 'Add package'); }
   const base = createTask(root, goal).base;
@@ -126,6 +126,7 @@ function runHarness(t, { env = {}, answer = true, omit = [], packageJson = { scr
     confirm: async question => { prompts.push(question); beforeAnswer(root); return answer; },
     choose: async question => { plans.push(question); return choices.shift() ?? ''; },
     classify: classify ?? ((g, o) => { classified.push(g); return { tier: o.fallback, reason: 'fake classifier', usage: null, ok: true }; }),
+    limits: async () => ({ codex: limits.codex ?? null }), claudeLimits: () => limits.claude ?? null,
   };
   const read = name => readFileSync(join(logs, name), 'utf8');
   const logged = name => existsSync(join(logs, name));
@@ -364,4 +365,12 @@ test('simple questions are answered cheaply by Claude from the file list and REA
   const args = JSON.parse(h.read('claude.json'));
   assert.equal(args[args.indexOf('--tools') + 1], ''); assert.equal(args[args.indexOf('--model') + 1], 'haiku');
   assert.match(h.read('claude-input.txt'), /FILES \(\d+\)[\s\S]*package\.json/);
+});
+test('near a plan limit, the build and review are capped at cheaper tiers, with the reason shown', async t => {
+  const large = 'Refactor the authentication flow across the codebase. (1) migrate the schema (2) keep logins (3) concurrency-safe refresh (4) docs (5) tests (6) benchmark performance';
+  const h = runHarness(t, { goal: large, limits: { codex: { primary: { usedPercent: 85, windowMinutes: 300 } }, claude: { secondary: { usedPercent: 93, windowMinutes: 10080 } } } });
+  await h.run();
+  const task = h.state();
+  assert.equal(task.routing.build.tier, 'medium'); assert.ok(task.routing.build.reasons.some(r => /Codex is at 85% of its 5-hour limit, so capped at medium/.test(r)));
+  assert.equal(task.routing.review.model, 'haiku');
 });

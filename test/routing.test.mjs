@@ -46,3 +46,11 @@ test('tier shifting is bounded and the classifier keeps the reviewer restriction
   assert.equal(args[args.indexOf('--tools') + 1], ''); assert.ok(args.includes('--safe-mode'));
   assert.equal(args[args.indexOf('--model') + 1], 'haiku');
 });
+test('limit caps only ever lower the tier', async () => {
+  const { capForLimits } = await import('../src/routing.mjs');
+  assert.deepEqual(capForLimits('large', null, 'Codex'), { tier: 'large', note: null });
+  assert.equal(capForLimits('large', { primary: { usedPercent: 79 } }, 'Codex').tier, 'large');
+  assert.equal(capForLimits('large', { primary: { usedPercent: 80 } }, 'Codex').tier, 'medium');
+  assert.equal(capForLimits('medium', { secondary: { usedPercent: 95, windowMinutes: 10080 } }, 'Claude').note, 'Claude is at 95% of its weekly limit, so capped at small');
+  assert.deepEqual(capForLimits('small', { primary: { usedPercent: 99 } }, 'Codex'), { tier: 'small', note: null });
+});
