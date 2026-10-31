@@ -28,3 +28,16 @@ test('Relay and limit statuses map to labelled levels', () => {
   assert.equal(statusLevel('something_new'), 'idle'); assert.equal(statusText('something_new'), 'something_new');
   assert.deepEqual([20, 70, 95].map(limitLevel), ['', 'warning', 'critical']);
 });
+test('saved layouts keep their order and sizes, add new tiles, and drop unknown ones', async () => {
+  const { mergeLayout, moveTo } = await import('../dashboard/src/format.js');
+  const defaults = [{ id: 'a', size: 's' }, { id: 'b', size: 'l' }, { id: 'c', size: 'm' }];
+  assert.deepEqual(mergeLayout([{ id: 'c', size: 'l' }, { id: 'x', size: 's' }, { id: 'a', size: 'huge' }], defaults), [{ id: 'c', size: 'l' }, { id: 'a', size: 's' }, { id: 'b', size: 'l' }]);
+  assert.deepEqual(mergeLayout('garbage', defaults), defaults);
+  assert.deepEqual(moveTo(defaults, 0, 2).map(w => w.id), ['b', 'c', 'a']); assert.equal(moveTo(defaults, 0, 5), defaults);
+});
+test('sessions of the same agent and project fold into one summary row', async () => {
+  const { groupSessions } = await import('../dashboard/src/format.js');
+  const s = (provider, project, lastAt, total, live = false) => ({ provider, project, lastAt, live, models: [`${provider}-m`], costUSD: 1, tokens: { input: total, cacheRead: 0, cacheWrite: 0, output: 0, total } });
+  const groups = groupSessions([s('claude', '~/a', '2026-10-30', 10), s('claude', '~/a', '2026-10-31', 5, true), s('codex', '~/a', '2026-10-29', 7)]);
+  assert.deepEqual(groups.map(g => [g.provider, g.sessions.length, g.tokens.total, g.live, g.lastAt, g.costUSD]), [['claude', 2, 15, true, '2026-10-31', 2], ['codex', 1, 7, false, '2026-10-29', 1]]);
+});

@@ -192,3 +192,22 @@ tr.detail td { white-space: normal; background: var(--wash); }
 @media (max-width: 820px) { .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .strip div:nth-child(3) { border-left: 0; } }
 .stages { display: inline-flex; gap: 3px; } .stages i { width: 18px; height: 6px; border-radius: 2px; background: var(--border); }
 .stages i.done { background: var(--good); } .stages i.failed { background: var(--critical); }
+/* Editable board: a 12-column grid; S = 4, M = 8, L = 12 columns. */
+.board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.widget { min-width: 0; position: relative; }
+.widget.w-s { grid-column: span 4; } .widget.w-m { grid-column: span 8; } .widget.w-l { grid-column: span 12; }
+.widget > *, .widget > section, .widget .grid, .widget .card { margin-bottom: 0; }
+.widget > .grid.limits, .widget > .grid.tiles, .widget > section > .grid { margin-bottom: 0; }
+.w-s .limits { grid-template-columns: 1fr; } .w-m .limits { grid-template-columns: repeat(2, minmax(0, 1fr)); } .w-l .limits { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.w-s .tiles { grid-template-columns: 1fr 1fr; }
+.w-s .account-body { grid-template-columns: 1fr; }
+.board.editing .widget { outline: 1px dashed var(--border); outline-offset: 4px; border-radius: 12px; animation: wiggle 0.5s ease-in-out infinite alternate; }
+.board.editing .widget:nth-child(even) { animation-delay: -0.25s; }
+.board.editing .widget.dragging { opacity: 0.4; }
+@keyframes wiggle { from { transform: rotate(-0.25deg); } to { transform: rotate(0.25deg); } }
+@media (prefers-reduced-motion: reduce) { .board.editing .widget { animation: none; } }
+.widget-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--ink-2); }
+.widget-bar .grip { cursor: grab; font-size: 16px; color: var(--muted); }
+.widget-bar button { padding: 2px 8px; font-size: 12px; } .widget-bar button:disabled { opacity: 0.35; }
+.widget-bar .sizes { display: inline-flex; gap: 4px; }
+@media (max-width: 820px) { .widget.w-s, .widget.w-m, .widget.w-l { grid-column: span 12; } }

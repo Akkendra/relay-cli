@@ -70,3 +70,37 @@ const STATUS = {
 export const statusLevel = s => STATUS[s]?.[0] ?? 'idle';
 export const statusText = s => STATUS[s]?.[1] ?? s;
 export function limitLevel(pct) { return pct >= 90 ? 'critical' : pct >= 70 ? 'warning' : ''; }
+
+// Dashboard layout: S / M / L tiles in saved order.
+export const SIZES = [['s', 'S', 'Small'], ['m', 'M', 'Medium'], ['l', 'L', 'Large']];
+
+// Saved layout plus any widgets added since it was saved; unknown ids are dropped.
+export function mergeLayout(saved, defaults) {
+  const known = new Map(defaults.map(w => [w.id, w]));
+  const kept = (Array.isArray(saved) ? saved : []).filter(w => known.has(w?.id)).map(w => ({ id: w.id, size: SIZES.some(([s]) => s === w.size) ? w.size : known.get(w.id).size }));
+  return [...kept, ...defaults.filter(w => !kept.some(k => k.id === w.id))];
+}
+export function moveTo(layout, from, to) {
+  if (from === to || from < 0 || to < 0 || to >= layout.length) return layout;
+  const next = [...layout]; const [item] = next.splice(from, 1); next.splice(to, 0, item); return next;
+}
+
+export const KEYS = ['input', 'cacheRead', 'cacheWrite', 'output', 'total'];
+
+// Sessions of the same agent in the same project fold into one summary row (newest activity first).
+export function groupSessions(sessions) {
+  const groups = new Map();
+  for (const s of sessions) {
+    const key = `${s.provider}\0${s.project ?? ''}`;
+    if (!groups.has(key)) groups.set(key, { key, provider: s.provider, project: s.project, relayProject: s.relayProject, sessions: [] });
+    groups.get(key).sessions.push(s);
+  }
+  return [...groups.values()].map(g => ({
+    ...g,
+    live: g.sessions.some(s => s.live),
+    lastAt: g.sessions.reduce((a, s) => (!a || (s.lastAt ?? '') > a ? s.lastAt : a), null),
+    models: [...new Set(g.sessions.flatMap(s => s.models))],
+    tokens: Object.fromEntries(KEYS.map(k => [k, g.sessions.reduce((n, s) => n + (s.tokens[k] ?? 0), 0)])),
+    costUSD: g.sessions.some(s => s.costUSD != null) ? g.sessions.reduce((n, s) => n + (s.costUSD ?? 0), 0) : null,
+  })).sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? ''));
+}
