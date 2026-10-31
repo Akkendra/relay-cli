@@ -66,8 +66,8 @@ export function scoreTask(goal, { trackedFiles = 0 } = {}) {
   if (up.length) { score += Math.min(3, up.length); reasons.push(`complex: ${up.slice(0, 3).join(', ')}`); }
   const down = [...new Set((goal.match(DOWN) ?? []).map(w => w.toLowerCase()))];
   if (down.length) { score -= Math.min(2, down.length); reasons.push(`simple: ${down.slice(0, 3).join(', ')}`); }
-  // Building from a document (a PDF spec) is a whole-app job, whatever the length of the ask.
-  const pdf = /\.pdf\b|\bpdfs?\b/i.test(goal);
+  // Building from a document (a PDF file in the ask) is a whole-app job, whatever the length of the ask.
+  const pdf = /\.pdf\b/i.test(goal);
   if (pdf) reasons.push('builds from a PDF');
   if (trackedFiles > 500) { score += 1; reasons.push(`large repo (${trackedFiles} files)`); }
   const tier = pdf || score >= 3 ? 'large' : score <= -1 ? 'small' : score === 1 ? 'medium' : null;
