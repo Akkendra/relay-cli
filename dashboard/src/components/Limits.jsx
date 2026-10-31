@@ -16,7 +16,7 @@ function LimitWindow({ provider, limits, window: w, now }) {
       </div>
       {level && <span className={`status ${level}`}>{level === 'critical' ? 'Near limit' : 'Getting high'} </span>}
       <div className="note" title={`Reported by ${SOURCE[provider]} ${ago(limits.observedAt, now)}; updates while ${SOURCE[provider]} runs.`}>
-        {w.resetsAt ? until(w.resetsAt, now) : ''}{limits.planType ? ` · ${limits.planType}` : ''}
+        {[w.resetsAt && until(w.resetsAt, now), limits.planType && `${limits.planType[0].toUpperCase()}${limits.planType.slice(1)} plan`].filter(Boolean).join(' · ')}
       </div>
     </div>
   );

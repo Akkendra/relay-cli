@@ -15,7 +15,7 @@ test('relative times and limit reset countdowns', () => {
   assert.equal(ago(null, now), '—'); assert.equal(ago('2026-10-30T11:59:30Z', now), 'just now');
   assert.equal(ago('2026-10-30T11:45:00Z', now), '15m ago'); assert.equal(ago('2026-10-30T09:00:00Z', now), '3h ago');
   assert.equal(until('2026-10-30T14:50:00Z', now), 'resets in 2h 50m'); assert.equal(until('2026-11-03T23:00:00Z', now), 'resets in 4d 11h');
-  assert.equal(until('2026-10-30T11:00:00Z', now), 'window has reset');
+  assert.equal(until('2026-10-30T11:00:00Z', now), 'Window reset');
   assert.equal(windowName(300), '5-hour window'); assert.equal(windowName(10080), 'Weekly window'); assert.equal(windowName(120), '2-hour window');
 });
 test('chart scale and bar geometry', () => {
