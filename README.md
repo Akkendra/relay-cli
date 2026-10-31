@@ -112,14 +112,7 @@ A read-only page covering every Codex and Claude Code session on this machine, n
 
 It prints a short line, such as `Opus 5.5 · 42% session · 17% week`. It saves only those two windows and their reset times to `~/.config/relay/claude-limits.json`, never the session's paths, prompts, or IDs. The dashboard then shows Claude bars next to the Codex ones. They update only while Claude Code is running, and a window that has passed its reset time is dropped rather than shown out of date.
 
-**From your phone (Tailscale).** Keep the server on loopback and let Tailscale Serve share it with your own devices only. Use `serve`, never `funnel`; Funnel publishes to the whole internet.
-
-```bash
-tailscale serve --bg 4318
-relay dashboard --allow-host <your-mac>.<tailnet>.ts.net
-```
-
-**Start at login (macOS).** A LaunchAgent with `RunAtLoad` and `KeepAlive` can run `node /path/to/relay/bin/relay.mjs dashboard [--allow-host ...]`. Use the absolute path to your `node`. If Relay lives in `~/Desktop` or `~/Documents`, macOS asks once for folder access.
+**Start at login (macOS).** A LaunchAgent with `RunAtLoad` and `KeepAlive` can run `node /path/to/relay/bin/relay.mjs dashboard`. Use the absolute path to your `node`. If Relay lives in `~/Desktop` or `~/Documents`, macOS asks once for folder access.
 
 ## Safety model
 
@@ -128,7 +121,7 @@ relay dashboard --allow-host <your-mac>.<tailnet>.ts.net
 - **Your git index is never touched.** Untracked, non-ignored files enter the diff through a temporary copy of the index. Ignored files, such as `.env`, stay out. Diffs over 100 KB are rejected, never truncated.
 - **Only one Relay operation runs at a time**, enforced by `.relay/lock`. After a crash, check that no provider process is still running before you delete it.
 - **The dashboard server:**
-  - binds to `127.0.0.1` and answers only `localhost`, `127.0.0.1`, and names you pass with `--allow-host`, so a malicious page can't reach it through DNS rebinding;
+  - binds to `127.0.0.1` and answers only `localhost`, `127.0.0.1`, so a malicious page can't reach it through DNS rebinding;
   - accepts only GET and sends a strict Content-Security-Policy (`script-src 'self'`, no inline scripts);
   - serves only `index.html` and `assets/`.
 - **`.relay/` can contain project code** (`review-input.txt`, `review.json`, test output). Keep it local; it's in `.gitignore`.
