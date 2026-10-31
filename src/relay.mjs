@@ -233,7 +233,8 @@ export function requireSubscriptionEnvironment(env) {
   const keys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'OPENAI_BASE_URL'];
   if (keys.some(k => env[k])) throw new Error('API/proxy environment overrides detected (values withheld). Use a terminal with subscription-only CLI configuration.');
 }
-const RULES = 'Do not push, commit, or deploy. Do not modify .relay state. Claude will independently review the diff. Stop and explain blockers.';
+// Skills that ask clarifying questions first (superpowers' brainstorming) would otherwise stop a hands-off build with nothing built.
+const RULES = 'The user has approved this task and opted out of clarifying questions: nobody is there to answer, so do not stop to ask. Make reasonable assumptions, build it, and list the assumptions in your final message. Do not push, commit, or deploy. Do not modify .relay state. Claude will independently review the diff. Stop and explain blockers.';
 // Codex subagents report to the lead thread, which routes questions and decisions between them.
 const LEAD = 'This is a large task, so act as the lead agent: read every referenced document first, plan the work, split it into independent parts and spawn one subagent per part (a fast model for narrow parts, a stronger one for demanding parts). The subagents report to you: answer their questions, decide between conflicting results, integrate the parts, and check the whole before you finish.';
 function buildPrompt(task, choice) { return `Implement this bounded task: ${task.goal}\n${choice?.tier === 'large' ? `${LEAD}\n` : ''}Use your installed skills and plugins where they apply. Run relevant checks and report results. ${RULES}`; }
