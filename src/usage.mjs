@@ -142,6 +142,25 @@ function relayTask(root, sessions) {
 }
 
 // Claude plan limits come from `relay statusline` (see statusline.mjs); windows past their reset time are dropped.
+// Account-style totals from this Mac's session logs (Claude Code has no account-wide history to read).
+function localAccount(sessions, now) {
+  if (!sessions.length) return null;
+  const byDay = {};
+  let lifetime = 0, longest = 0;
+  for (const s of sessions) {
+    lifetime += s.tokens.total;
+    for (const [date, t] of Object.entries(s.byDay)) byDay[date] = (byDay[date] ?? 0) + t.total;
+    if (s.startedAt && s.lastAt) longest = Math.max(longest, (new Date(s.lastAt) - new Date(s.startedAt)) / 1000);
+  }
+  const dates = Object.keys(byDay).filter(d => byDay[d] > 0).sort(), day = 86400000;
+  let run = 0, best = 0;
+  dates.forEach((d, i) => { run = i && new Date(d) - new Date(dates[i - 1]) === day ? run + 1 : 1; best = Math.max(best, run); });
+  const last = dates.at(-1), today = localDate(now), yesterday = localDate(new Date(now - day));
+  return { observedAt: now.toISOString(), daily: dates.map(date => ({ date, tokens: byDay[date] })),
+    summary: { lifetimeTokens: lifetime, peakDailyTokens: Math.max(0, ...Object.values(byDay)), longestRunningTurnSec: Math.round(longest),
+      currentStreakDays: last === today || last === yesterday ? run : 0, longestStreakDays: best } };
+}
+
 export function claudeLimits(configDir, now = new Date()) {
   const saved = readJson(join(configDir, 'claude-limits.json'));
   if (!saved?.observedAt) return null;
@@ -187,12 +206,14 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
   }
   const claudeCosts = readJson(join(configDir, 'claude-costs.json')) ?? {}, codexCosts = codexAccount?.threadCosts ?? {};
   const costOf = s => (s.provider === 'claude' ? claudeCosts[s.id]?.usd : codexCosts[s.id]) ?? null;
+  const claudeAccount = localAccount(sessions.filter(s => s.provider === 'claude'), now);
   const latestCodexLimits = sessions.filter(s => s.limits).sort((a, b) => a.limits.observedAt < b.limits.observedAt ? 1 : -1)[0]?.limits ?? null;
   const short = p => p && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   return {
     generatedAt: now.toISOString(),
     sources: Object.fromEntries(Object.entries(sourceInfo).map(([k, v]) => [k, { ...v, dir: short(v.dir) }])),
     limits: { codex: codexAccount?.limits?.primary || codexAccount?.limits?.secondary ? codexAccount.limits : latestCodexLimits, claude: claudeLimits(configDir, now) },
+    claudeAccount,
     codexAccount: codexAccount && (codexAccount.error ? { error: codexAccount.error, observedAt: codexAccount.observedAt }
       : { observedAt: codexAccount.observedAt, summary: codexAccount.summary, daily: codexAccount.daily }),
     daily,

@@ -10,14 +10,13 @@ function LimitWindow({ provider, limits, window: w, now }) {
   return (
     <div className="card">
       <div className="label"><Dot provider={provider} />{providerName(provider)} · {name}</div>
-      <div className="value">{Math.round(pct)}% used</div>
+      <div className="value">{Math.round(pct)}<small>% used</small></div>
       <div className={`meter ${provider} ${level}`} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${providerName(provider)} ${name} used`}>
         <span style={{ width: `${pct}%` }} />
       </div>
       {level && <span className={`status ${level}`}>{level === 'critical' ? 'Near limit' : 'Getting high'} </span>}
-      {w.resetsAt && <span className="note">{until(w.resetsAt, now)}</span>}
-      <div className="note">
-        Reported by {SOURCE[provider]} {ago(limits.observedAt, now)}{limits.planType && ` · ${limits.planType} plan`}. Updates only while {SOURCE[provider]} runs.
+      <div className="note" title={`Reported by ${SOURCE[provider]} ${ago(limits.observedAt, now)}; updates while ${SOURCE[provider]} runs.`}>
+        {w.resetsAt ? until(w.resetsAt, now) : ''}{limits.planType ? ` · ${limits.planType}` : ''}
       </div>
     </div>
   );

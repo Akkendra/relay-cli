@@ -8,28 +8,20 @@ import { Sessions } from './components/Sessions.jsx';
 import { RelayTasks } from './components/RelayTasks.jsx';
 import { CodexAccount } from './components/CodexAccount.jsx';
 import { Setup } from './components/Setup.jsx';
-import { METRICS, metricName, metricValue } from './format.js';
+import { Clock, Core } from './components/Hud.jsx';
+import { METRICS, ago, metricName, metricValue } from './format.js';
 import { usePersisted, useSummary } from './hooks.js';
 
 const SERIES = ['codex', 'claude'];
 const RANGES = [{ value: '7', label: '7d' }, { value: '14', label: '14d' }, { value: '30', label: '30d' }];
 const NEXT_THEME = { auto: 'light', light: 'dark', dark: 'auto' };
 
+// Only shown when some log lines or files couldn't be read.
 function Footer({ sources }) {
   const skipped = sources.codex.skippedLines + sources.claude.skippedLines;
   const unreadable = sources.codex.unreadable + sources.claude.unreadable;
-  return (
-    <footer>
-      <div>
-        Sources: {sources.codex.files} Codex logs in {sources.codex.dir} · {sources.claude.files} Claude Code transcripts in {sources.claude.dir}.
-        Read-only; nothing leaves this machine.
-      </div>
-      <div>
-        Totals include cache reads unless a view excludes them. Codex counts cached tokens inside input; they're split out here.
-        Log formats are undocumented and may change{(skipped > 0 || unreadable > 0) && <> — <b>{skipped} lines and {unreadable} files could not be read</b></>}.
-      </div>
-    </footer>
-  );
+  if (!skipped && !unreadable) return null;
+  return <footer><div><b>{skipped} log lines and {unreadable} files could not be read</b>; log formats are undocumented and may change.</div></footer>;
 }
 
 export function App() {
@@ -41,8 +33,12 @@ export function App() {
   const [showTable, setShowTable] = useState(false);
 
   useEffect(() => {
-    if (theme === 'auto') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = theme;
+    const root = document.documentElement, media = matchMedia('(prefers-color-scheme: dark)');
+    if (theme === 'auto') delete root.dataset.theme; else root.dataset.theme = theme;
+    // The command-center look is the dark theme.
+    const apply = () => root.classList.toggle('hud', theme === 'dark' || (theme === 'auto' && media.matches));
+    apply(); media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
   }, [theme]);
 
   const now = data ? Date.now() : 0;
@@ -51,16 +47,19 @@ export function App() {
   return (
     <main>
       <header>
-        <h1>Relay usage</h1>
-        <span className="sub">{data ? `Local Codex and Claude Code logs · updated ${new Date(data.generatedAt).toLocaleTimeString()}` : 'Loading…'}</span>
+        <div><h1>Relay</h1><div className="tagline">Your agent command center</div></div>
+        <span className={`pill ${error ? 'off' : 'on'}`}>{error ? 'Offline' : data ? 'Connected' : 'Connecting'}</span>
+        <span className="sub">{data ? `updated ${ago(data.generatedAt)}` : ''}</span>
         <span className="spacer" />
+        <Clock />
         <button type="button" title="Switch theme" onClick={() => setTheme(NEXT_THEME[theme] ?? 'auto')}>Theme: {theme}</button>
       </header>
       {error && <div className="banner" role="alert">Can’t reach the dashboard server ({error}). Is relay dashboard still running?</div>}
       {data && (
         <>
-          <Limits limits={data.limits} now={now} />
+          <section className="hero"><Core live={data.sessions.filter(s => s.live).length} /><Limits limits={data.limits} now={now} /></section>
           <CodexAccount account={data.codexAccount} dates={days.map(d => d.date)} now={now} />
+          <CodexAccount provider="claude" account={data.claudeAccount} dates={days.map(d => d.date)} now={now} />
           <Tiles data={data} metric={metric} />
           <section className="grid two">
             <div className="card">
