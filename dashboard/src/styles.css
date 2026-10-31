@@ -97,10 +97,19 @@ footer { color: var(--muted); font-size: 12px; margin-top: 20px; display: grid; 
 .pager button:disabled { opacity: 0.4; cursor: default; }
 td.wrap { white-space: normal; min-width: 200px; }
 
-/* Command-center look (dark theme): flat surfaces, one accent, sans-serif hierarchy, monospace only for figures. */
-html.hud.hud { --page: #080c14; --surface: #0d1320; --ink: #e6ebf2; --ink-2: #aab4c3; --muted: #758196; --grid: rgba(255, 255, 255, 0.05);
-  --axis: rgba(255, 255, 255, 0.12); --border: rgba(255, 255, 255, 0.07); --wash: rgba(255, 255, 255, 0.04); --accent: #6fb7ff;
-  --codex: #3987e5; --claude: #d95926; --codex-track: #18243a; --claude-track: #2b1a14; color-scheme: dark; }
+/* Command-center look (dark theme): every tone derives from one brand hue in OKLCH; no pure black, tinted greys,
+   depth from edge light and soft shadow rather than borders alone. */
+html.hud.hud { --hue: 255; --page: oklch(0.15 0.02 var(--hue)); --surface: oklch(0.195 0.024 var(--hue)); --ink: oklch(0.95 0.008 var(--hue));
+  --ink-2: oklch(0.8 0.02 var(--hue)); --muted: oklch(0.66 0.03 var(--hue)); --grid: oklch(0.95 0.01 var(--hue) / 0.06);
+  --axis: oklch(0.95 0.01 var(--hue) / 0.14); --border: oklch(0.95 0.01 var(--hue) / 0.07); --wash: oklch(0.95 0.01 var(--hue) / 0.05);
+  --accent: oklch(0.78 0.11 var(--hue)); --codex: #3987e5; --claude: #d95926; --codex-track: oklch(0.27 0.04 var(--hue)); --claude-track: oklch(0.26 0.035 40);
+  --edge: inset 0 1px 0 oklch(1 0 0 / 0.05); --lift: 0 10px 30px -18px oklch(0.05 0.02 var(--hue) / 0.9); color-scheme: dark; }
+.hud .card { box-shadow: var(--edge), var(--lift); }
+/* Type scale (1.25), tracking tightening as size grows. */
+.hud h1 { font-size: 1.5625rem; letter-spacing: -0.02em; }
+.hud .value { font-size: 1.953rem; letter-spacing: -0.035em; }
+.hud h2 { font-size: 0.875rem; letter-spacing: -0.005em; }
+.hud .label, .hud .note, .hud th { letter-spacing: 0.005em; }
 .hud body { background: var(--page); }
 .hud main { max-width: 1240px; padding-top: 28px; }
 .hud .card { background: var(--surface); border-color: var(--border); border-radius: 10px; padding: 18px; }
