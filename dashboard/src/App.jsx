@@ -26,8 +26,8 @@ function Footer({ sources }) {
 
 export function App() {
   const { data, error } = useSummary();
-  const [metric, setMetric] = usePersisted('metric', 'nocache');
-  const [range, setRange] = usePersisted('range', '14');
+  const [metric, setMetric] = usePersisted('metric', 'all');
+  const [range, setRange] = usePersisted('range', '7');
   const [provider, setProvider] = usePersisted('provider', 'all');
   const [stored, setTheme] = usePersisted('theme', 'dark');
   // The command-center look is the default; light only when chosen (an old 'auto' preference counts as dark).
@@ -56,7 +56,7 @@ export function App() {
       {error && <div className="banner" role="alert">Can’t reach the dashboard server ({error}). Is relay dashboard still running?</div>}
       {data && (
         <>
-          <section className="hero" id="overview"><Core live={data.sessions.filter(s => s.live).length} /><Limits limits={data.limits} now={now} /></section>
+          <section className="hero" id="overview"><Core sessions={data.sessions} now={now} /><Limits limits={data.limits} now={now} /></section>
           <div id="usage" />
           <CodexAccount account={data.codexAccount} now={now} />
           <CodexAccount provider="claude" account={data.claudeAccount} now={now} />
