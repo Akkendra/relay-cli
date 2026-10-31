@@ -64,7 +64,7 @@ relay> Create formatDuration(minutes). Acceptance: 0 -> '0m', 65 -> '1h 5m'; rej
 
 **Follow-ups.** While the current task has changes, a new line at the prompt asks `[Enter] follow up on the current task · [n] new task`. Follow-ups continue the same Codex session; `/continue <text>` does the same without asking.
 
-**Large tasks and skills.** Codex is told to use its installed skills and plugins. On the large tier (and for any build from a PDF file), it acts as a lead agent: it plans, splits the work across Codex subagents, settles their questions and conflicts, and integrates the result.
+**Large tasks and skills.** Codex is told to use its installed skills and plugins, and that the task is approved with nobody there to answer questions: it makes reasonable assumptions and lists them instead of stopping to ask (skills that clarify before building would otherwise end a run with nothing built). Codex can install Claude-format plugin marketplaces too, for example `codex plugin marketplace add <owner/repo>` then `codex plugin add <plugin>@<marketplace>`. On the large tier (and for any build from a PDF file), it acts as a lead agent: it plans, splits the work across Codex subagents, settles their questions and conflicts, and integrates the result.
 
 **Baselines.** Each task's starting point is a snapshot of the folder: a git tree written through a temporary index. Nothing is committed and your index isn't touched. Tasks run back to back in one folder, and each is reviewed on its own changes only.
 

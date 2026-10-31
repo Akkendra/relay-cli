@@ -155,6 +155,7 @@ test('run builds, tests with consent, and sends unstaged new files and evidence 
     ['exec', '--json', '-m', 'gpt-6-luna', '-c', 'model_reasoning_effort="low"', '-c', 'approval_policy="never"', '--sandbox', 'workspace-write', '-'],
     'Codex runs to completion on the small model, sandboxed, and can never escalate');
   assert.match(h.read('codex-prompt-1.txt'), /Implement this bounded task: Add feature; test it[\s\S]*Do not push, commit, or deploy/);
+  assert.match(h.read('codex-prompt-1.txt'), /do not stop to ask[\s\S]*list the assumptions/, 'question-first skills cannot stall a hands-off build');
   assert.deepEqual(JSON.parse(h.read('npm.json')), ['test']);
   assert.deepEqual(JSON.parse(h.read('claude.json')), reviewArgs({ model: 'haiku', effort: 'low' }), 'a small diff gets the small reviewer');
   assert.equal(h.plans.length, 1, 'only the build plan; nothing waits after a clean review'); assert.equal(h.classified.length, 0, 'clear-cut tasks never call the classifier');
