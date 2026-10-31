@@ -69,6 +69,23 @@ relay run
 
 Every step is recorded in `task.run.steps`. An interrupted run doesn't resume automatically. Finish it with `relay review`, or start again with `relay run`.
 
+## Model routing
+
+Relay sizes each task so small work goes to cheaper models and complex work to bigger ones.
+
+| Tier | Codex (build) | Claude (review) |
+|---|---|---|
+| small | `gpt-6-luna`, low effort | `haiku`, low effort |
+| medium | `gpt-6.1-sol`, medium effort | `sonnet`, medium effort |
+| large | `gpt-6-astra`, high effort | `opus`, high effort |
+
+- **Build tier, before Codex starts.** Relay scores the task locally, for free, from its length, the number of acceptance criteria, signal words ("refactor", "security" vs "typo", "docs"), and repo size. Only borderline scores get a second opinion from Claude Haiku, which costs about 1–2K tokens and runs with no tools. You see the plan and press Enter to run it, `b` or `s` to go one tier bigger or smaller, or `q` to cancel.
+- **Review tier, after the build,** based on what actually changed: up to 60 lines in at most 3 files is small, over 600 lines or 15 files is large. Changes to auth, payments, secrets, workflows, `package.json`, or `.env*` always get the large reviewer.
+- **Usage is recorded.** Each task saves its tiers, which model chose them (rules, classifier, or you), and the build's tokens, read from Codex's session log. The dashboard shows them on the task's card.
+- **Model names can be overridden** in `~/.config/relay/models.json`, for example `{"codex": {"small": {"model": "gpt-6-luna", "effort": "low"}}}`. Names and effort levels are validated, so a typo can't become a CLI flag.
+
+Codex sends its own instructions with every call (about 15K mostly cached input tokens, even for a one-word reply). That fixed cost limits how much a small model can save on tiny tasks.
+
 ## Usage dashboard
 
 ```bash

@@ -50,7 +50,8 @@ test('large review is rejected instead of silently losing changes', t => {
 });
 test('provider arguments preserve approval path and remove reviewer tools', () => {
   const args = buildArgs({ goal: 'literal $(do-not-execute)' });
-  assert.equal(args[3], 'on-request'); assert.ok(!args.includes('--yolo'));
+  assert.equal(args[args.indexOf('--ask-for-approval') + 1], 'on-request'); assert.ok(!args.includes('--yolo'));
+  assert.equal(args[args.indexOf('--sandbox') + 1], 'workspace-write');
   const review = reviewArgs(); assert.equal(review[review.indexOf('--tools') + 1], '');
   assert.equal(review[review.indexOf('--disallowedTools') + 1], 'mcp__*');
 });
@@ -58,6 +59,12 @@ test('provider arguments preserve approval path and remove reviewer tools', () =
 // Fake provider executables placed first on PATH; they log what they received and spend no tokens.
 const fakes = {
   codex: `fs.writeFileSync(log('codex.json'), JSON.stringify(process.argv.slice(2)));
+const now = new Date().toISOString(), sessions = require('path').join(process.env.HOME, '.codex', 'sessions');
+fs.mkdirSync(sessions, { recursive: true });
+fs.writeFileSync(require('path').join(sessions, 'rollout-fake.jsonl'), [
+  { timestamp: now, type: 'session_meta', payload: { id: 'codex-fake', cwd: process.cwd(), timestamp: now } },
+  { timestamp: now, type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 900, cached_input_tokens: 600, output_tokens: 40 } } } },
+].map(JSON.stringify).join('\\n'));
 fs.mkdirSync('src', { recursive: true }); fs.writeFileSync('src/feature.js', 'export const feature = 1;\\n');
 process.exit(Number(process.env.FAKE_CODEX_EXIT || 0));`,
   npm: `fs.writeFileSync(log('npm.json'), JSON.stringify(process.argv.slice(2)));
@@ -71,32 +78,39 @@ if (mode === 'exit1') { console.error('authentication expired'); process.exit(1)
 if (mode === 'badjson') { console.log('not json'); process.exit(0); }
 console.log(JSON.stringify({ is_error: mode === 'is_error', result: 'Findings: one possible bug.', usage: null }));`,
 };
-function runHarness(t, { env = {}, answer = true, omit = [], packageJson = { scripts: { test: 'node --test' } }, beforeAnswer = () => {} } = {}) {
+function runHarness(t, { env = {}, answer = true, omit = [], packageJson = { scripts: { test: 'node --test' } }, beforeAnswer = () => {},
+  goal = 'Add feature; test it', choices = [], classify } = {}) {
   const { root, git } = fixture(t);
   if (packageJson) { writeFileSync(join(root, 'package.json'), JSON.stringify(packageJson)); git('add', '.'); git('commit', '-m', 'Add package'); }
-  const base = createTask(root, 'Add feature; test it').base;
+  const base = createTask(root, goal).base;
   const dir = tempDir(t, 'relay-fakes-');
-  const bin = join(dir, 'bin'), logs = join(dir, 'logs'); mkdirSync(bin); mkdirSync(logs);
+  const bin = join(dir, 'bin'), logs = join(dir, 'logs'), home = join(dir, 'home'); mkdirSync(bin); mkdirSync(logs); mkdirSync(home);
   for (const [name, body] of Object.entries(fakes)) if (!omit.includes(name)) {
     writeFileSync(join(bin, name), `#!/usr/bin/env node\nconst fs = require('fs'), log = f => require('path').join(process.env.FAKE_LOG, f);\n${body}\n`, { mode: 0o755 });
   }
-  const prompts = [];
+  const prompts = [], plans = [], classified = [];
   const deps = {
-    env: { PATH: `${bin}${delimiter}${process.env.PATH}`, HOME: process.env.HOME, FAKE_LOG: logs, ...env },
-    isTTY: true, output: { write() {} },
+    // A fake HOME keeps fake Codex session logs and model config out of the real home directory.
+    env: { PATH: `${bin}${delimiter}${process.env.PATH}`, HOME: home, FAKE_LOG: logs, ...env },
+    home, isTTY: true, output: { write() {} },
     confirm: async question => { prompts.push(question); beforeAnswer(root); return answer; },
+    choose: async question => { plans.push(question); return choices.shift() ?? ''; },
+    classify: classify ?? ((g, o) => { classified.push(g); return { tier: o.fallback, reason: 'fake classifier', usage: null, ok: true }; }),
   };
   const read = name => readFileSync(join(logs, name), 'utf8');
   const logged = name => existsSync(join(logs, name));
   const state = () => JSON.parse(readFileSync(join(root, '.relay', 'state.json'), 'utf8')).task;
-  return { root, git, base, prompts, read, logged, state, run: () => main(['run'], root, deps) };
+  return { root, git, base, home, prompts, plans, classified, read, logged, state, run: () => main(['run'], root, deps) };
 }
 test('run builds, tests with consent, and sends unstaged new files and evidence to review', async t => {
   const h = runHarness(t);
   await h.run();
-  assert.deepEqual(JSON.parse(h.read('codex.json')).slice(0, 4), buildArgs({ goal: '' }).slice(0, 4));
+  const codexArgs = JSON.parse(h.read('codex.json'));
+  assert.deepEqual(codexArgs.slice(0, 4), ['-m', 'gpt-6-luna', '-c', 'model_reasoning_effort="low"'], 'a short task is routed to the small model');
+  assert.equal(codexArgs[codexArgs.indexOf('--ask-for-approval') + 1], 'on-request');
   assert.deepEqual(JSON.parse(h.read('npm.json')), ['test']);
-  assert.deepEqual(JSON.parse(h.read('claude.json')), reviewArgs());
+  assert.deepEqual(JSON.parse(h.read('claude.json')), reviewArgs({ model: 'haiku', effort: 'low' }), 'a small diff gets the small reviewer');
+  assert.equal(h.plans.length, 1); assert.equal(h.classified.length, 0, 'clear-cut tasks never call the classifier');
   assert.equal(h.prompts.length, 1); assert.match(h.prompts[0], /npm test/);
   const packet = h.read('claude-input.txt');
   assert.match(packet, /export const feature = 1/); assert.match(packet, /src\/feature\.js/);
@@ -107,6 +121,9 @@ test('run builds, tests with consent, and sends unstaged new files and evidence 
   assert.equal(task.status, 'needs_human_decision');
   assert.deepEqual(task.run.steps.map(s => s.step), ['started', 'built', 'testing', 'tests_recorded', 'reviewed']);
   assert.equal(task.run.tests.diffHash, task.reviewHash);
+  assert.equal(task.routing.build.tier, 'small'); assert.equal(task.routing.build.source, 'rules');
+  assert.deepEqual(task.routing.build.tokens, { input: 300, cacheRead: 600, cacheWrite: 0, output: 40, reasoning: 0, total: 940 }, 'build tokens come from the Codex session log');
+  assert.equal(task.routing.review.model, 'haiku');
   assert.match(packet, new RegExp(`Tested diff SHA-256: ${task.reviewHash}`));
   assert.ok(!existsSync(join(h.root, '.relay', 'lock')));
 });
@@ -168,7 +185,7 @@ test('a failed Codex session stops before tests and review', async t => {
 test('missing provider executables fail clearly', async t => {
   const h = runHarness(t, { omit: ['codex'] });
   // PATH points nowhere, so a real codex can never be launched.
-  await assert.rejects(main(['run'], h.root, { env: { PATH: '/nonexistent' }, isTTY: true, confirm: async () => true, output: { write() {} } }), /codex not found on PATH/);
+  await assert.rejects(main(['run'], h.root, { env: { PATH: '/nonexistent', HOME: h.home }, home: h.home, isTTY: true, confirm: async () => true, choose: async () => '', output: { write() {} } }), /codex not found on PATH/);
   assert.equal(h.state().status, 'interrupted');
 });
 for (const [mode, pattern] of [['exit1', /Claude review failed \(1\): authentication expired/], ['badjson', /invalid JSON/], ['is_error', /Claude reported an error/]]) {
@@ -188,4 +205,19 @@ test('run requires an interactive terminal for Codex approvals', async t => {
   const h = runHarness(t);
   await assert.rejects(main(['run'], h.root, { env: {}, isTTY: false }), /interactive terminal/);
   assert.ok(!h.logged('codex.json'));
+});
+test('the build plan can be bumped up before Codex starts, and borderline tasks ask the classifier', async t => {
+  const goal = 'Add an export button to the reports page that downloads the visible rows as a CSV file, keeps the current filters, and shows a short confirmation message when the download starts';
+  const h = runHarness(t, { goal, choices: ['b'] .concat(['']) });
+  await h.run();
+  assert.equal(h.classified.length, 1, 'a borderline task gets one classifier call');
+  const task = h.state();
+  assert.equal(task.routing.build.source, 'you');
+  assert.deepEqual(JSON.parse(h.read('codex.json')).slice(0, 2), ['-m', task.routing.build.model]);
+  assert.equal(h.plans.length, 2, 'the plan is shown again after a change');
+});
+test('cancelling the build plan starts nothing', async t => {
+  const h = runHarness(t, { choices: ['q'] });
+  await assert.rejects(h.run(), /Cancelled before Codex started/);
+  assert.ok(!h.logged('codex.json')); assert.equal(h.state().run.steps.at(-1).step, 'cancelled');
 });

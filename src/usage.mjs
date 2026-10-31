@@ -104,6 +104,17 @@ export function parseClaudeSession(lines, path) {
   return s;
 }
 
+// The newest Codex session started in `cwd` since `since`, for per-task token accounting after an interactive build.
+export function findCodexSession({ home, cwd, since }) {
+  let best = null;
+  for (const file of jsonlFiles(join(home, '.codex', 'sessions'))) {
+    let s;
+    try { s = parseCached(file, parseCodexSession); } catch { continue; }
+    if (s.cwd === cwd && s.startedAt && s.startedAt >= since && (!best || s.startedAt > best.startedAt)) best = s;
+  }
+  return best && { id: best.id, tokens: best.tokens, models: best.models };
+}
+
 function findRelayRoot(cwd) {
   for (let dir = cwd, i = 0; dir && i < 6; dir = dirname(dir), i++) {
     if (existsSync(join(dir, '.relay', 'state.json'))) return dir;
@@ -112,6 +123,8 @@ function findRelayRoot(cwd) {
   return null;
 }
 function readJson(path) { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; } }
+const routed = c => c && { tier: c.tier ?? null, model: c.model ?? null, effort: c.effort ?? null, source: c.source ?? null, tokens: c.tokens ?? null };
+function routingSummary(r) { return r ? { build: routed(r.build), review: routed(r.review) } : null; }
 function relayTask(root, sessions) {
   const task = readJson(join(root, '.relay', 'state.json'))?.task;
   const review = readJson(join(root, '.relay', 'review.json'));
@@ -120,6 +133,7 @@ function relayTask(root, sessions) {
     root, status: task?.status ?? 'no_task', goal: task?.goal ?? null,
     steps: (task?.run?.steps ?? []).map(({ step, at }) => ({ step, at })),
     tests: tests ? { ran: tests.ran, exitCode: tests.exitCode ?? null, reason: tests.reason ?? null } : null,
+    routing: routingSummary(task?.routing),
     review: review ? { model: Object.keys(review.modelUsage ?? {})[0] ?? null, durationMs: review.duration_ms ?? null, costUSD: review.total_cost_usd ?? null,
       tokens: review.usage ? claudeTokens(review.usage) : null } : null,
     sessions: sessions.map(s => ({ provider: s.provider, id: s.id, lastAt: s.lastAt, total: s.tokens.total, isReview: Boolean(review?.session_id) && s.id === review.session_id })),

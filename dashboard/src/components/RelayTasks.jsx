@@ -6,10 +6,15 @@ function testsText(t) {
   if (!t.ran) return `Not run: ${t.reason}`;
   return t.exitCode === 0 ? 'Passed (exit 0)' : `Failed (exit ${t.exitCode})`;
 }
-function reviewText(rv) {
+function buildText(b) {
+  if (!b?.model) return '—';
+  const tokens = b.tokens ? ` · ${fmt(b.tokens.total)} tokens` : '';
+  return `${b.model} · ${b.tier}${b.source ? ` (${b.source === 'you' ? 'your choice' : b.source})` : ''}${tokens}`;
+}
+function reviewText(rv, routed) {
   if (!rv) return '—';
   const tokens = rv.tokens ? `${fmt(rv.tokens.total)} tokens (${fmt(rv.tokens.output)} output)` : 'usage unknown';
-  return `${rv.model ?? 'unknown model'} · ${tokens}${rv.durationMs ? ` · ${Math.round(rv.durationMs / 1000)}s` : ''}`;
+  return `${rv.model ?? 'unknown model'}${routed?.tier ? ` · ${routed.tier}` : ''} · ${tokens}${rv.durationMs ? ` · ${Math.round(rv.durationMs / 1000)}s` : ''}`;
 }
 
 function Task({ task }) {
@@ -24,7 +29,8 @@ function Task({ task }) {
       )}
       <dl className="kv">
         <dt>Tests</dt><dd>{testsText(task.tests)}</dd>
-        <dt>Review</dt><dd>{reviewText(rv)}</dd>
+        <dt>Build</dt><dd>{buildText(task.routing?.build)}</dd>
+        <dt>Review</dt><dd>{reviewText(rv, task.routing?.review)}</dd>
         {rv?.costUSD != null && <><dt>List-price est.</dt><dd>${rv.costUSD.toFixed(3)} <span className="muted">(not your subscription bill)</span></dd></>}
         <dt>Sessions in folder</dt>
         <dd>{task.sessions.length ? task.sessions.map(s => (
