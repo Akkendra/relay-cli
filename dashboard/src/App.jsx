@@ -33,9 +33,7 @@ function Footer({ sources }) {
 }
 
 export function App() {
-  const { data, error, at } = useSummary();
-  // Offline when a refresh fails or the last good one is over 30 seconds old.
-  const offline = Boolean(error) || (at && Date.now() - at > 30000);
+  const { data, error } = useSummary();
   // New keys so the All tokens / 7 days defaults apply once, even where older choices were saved.
   const [metric, setMetric] = usePersisted('metric.v2', 'all');
   const [range, setRange] = usePersisted('range.v2', '7');
@@ -62,7 +60,6 @@ export function App() {
         <a className="brand" href="/">RELAY</a>
         <nav className="sections" aria-label="Sections"><a href="#w-agents">Overview</a><a href="#w-codex">Usage</a><a href="#sessions">Sessions</a><a href="#runs">Runs</a><a href="#setup">Setup</a></nav>
         <div className="tools">
-          <span className={`live ${offline ? 'off' : data ? 'on' : ''}`} title={data ? `Last update ${new Date(data.generatedAt).toLocaleTimeString()}${error ? ` · ${error}` : ''}` : 'Connecting'}>{offline ? 'Offline' : data ? 'Live' : 'Connecting'}</span>
           <Clock />
           {editing && <button type="button" onClick={() => setLayout(DEFAULT_LAYOUT)}>Reset layout</button>}
           <button type="button" aria-pressed={editing} onClick={() => setEditing(v => !v)}>{editing ? 'Done' : 'Edit'}</button>
@@ -73,7 +70,7 @@ export function App() {
       {data && (
         <>
           <Board layout={layout} setLayout={setLayout} editing={editing} widgets={{
-            agents: { title: 'Agents', render: () => <Core sessions={data.sessions} today={data.daily.at(-1)} now={now} /> },
+            agents: { title: 'Agents', render: () => <Core sessions={data.sessions} today={data.daily.at(-1)} hourly={data.hourly} now={now} /> },
             latest: { title: 'Latest run', render: () => <LatestRun runs={data.runs} now={now} /> },
             limits: { title: 'Plan limits', render: () => <Limits limits={data.limits} now={now} /> },
             codex: { title: 'Codex · all devices', render: () => <CodexAccount account={data.codexAccount} now={now} /> },

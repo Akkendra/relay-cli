@@ -38,12 +38,13 @@ function tokens(input, cacheRead, cacheWrite, output, reasoning) {
   return { input, cacheRead, cacheWrite, output, reasoning, total: input + cacheRead + cacheWrite + output };
 }
 function localDate(iso) { return new Date(iso).toLocaleDateString('en-CA'); }
+const localHour = iso => { const d = new Date(iso); return `${localDate(d)}T${String(d.getHours()).padStart(2, '0')}`; };
 // Sessions keep per-day and per-model totals instead of raw events, so a poll merges small maps.
 function newSession(provider, path) {
-  return { provider, path, id: null, cwd: null, startedAt: null, lastAt: null, models: [], tokens: emptyTokens(), byDay: {}, byModel: {}, limits: null, skippedLines: 0 };
+  return { provider, path, id: null, cwd: null, startedAt: null, lastAt: null, models: [], tokens: emptyTokens(), byDay: {}, byHour: {}, byModel: {}, limits: null, skippedLines: 0 };
 }
 function record(s, at, model, t) {
-  if (at) addTokens(s.byDay[localDate(at)] ??= emptyTokens(), t);
+  if (at) { addTokens(s.byDay[localDate(at)] ??= emptyTokens(), t); s.byHour[localHour(at)] = (s.byHour[localHour(at)] ?? 0) + t.total; }
   addTokens(s.byModel[model] ??= emptyTokens(), t);
 }
 
@@ -208,9 +209,13 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
   const daily = [];
   for (let d = new Date(start); d <= now; d.setDate(d.getDate() + 1)) daily.push({ date: localDate(d), codex: emptyTokens(), claude: emptyTokens() });
   const dayIndex = new Map(daily.map(d => [d.date, d]));
+  // The last 12 hours, oldest first, for the Agents sparklines.
+  const hourly = Array.from({ length: 12 }, (_, i) => ({ hour: localHour(new Date(now - (11 - i) * 3600000)), codex: 0, claude: 0 }));
+  const hourIndex = new Map(hourly.map(h => [h.hour, h]));
   const models = new Map(), rootOf = new Map(), byRoot = new Map();
   for (const s of sessions) {
     for (const [date, t] of Object.entries(s.byDay)) if (dayIndex.has(date)) addTokens(dayIndex.get(date)[s.provider], t);
+    for (const [hour, n] of Object.entries(s.byHour ?? {})) if (hourIndex.has(hour)) hourIndex.get(hour)[s.provider] += n;
     for (const [model, t] of Object.entries(s.byModel)) {
       const key = `${s.provider}\0${model}`;
       if (!models.has(key)) models.set(key, { provider: s.provider, model, tokens: emptyTokens(), sessions: 0 });
@@ -233,6 +238,7 @@ export function summarize({ home, configDir = join(home, '.config', 'relay'), no
     codexAccount: codexAccount && (codexAccount.error ? { error: codexAccount.error, observedAt: codexAccount.observedAt }
       : { observedAt: codexAccount.observedAt, summary: codexAccount.summary, daily: codexAccount.daily }),
     daily,
+    hourly,
     models: [...models.values()].sort((a, b) => b.tokens.total - a.tokens.total),
     sessions: sessions.sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '')).slice(0, 300).map(s => ({
       provider: s.provider, id: s.id, project: short(s.cwd), relayProject: Boolean(s.cwd && rootOf.get(s.cwd)), models: s.models, startedAt: s.startedAt, lastAt: s.lastAt,

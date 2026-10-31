@@ -74,6 +74,7 @@ test('usage summary splits Codex cached input, dedupes Claude messages, and neve
   assert.equal(s.limits.codex.primary.usedPercent, 20); assert.equal(s.limits.codex.planType, 'plus');
   const today = s.daily.find(d => d.date === now.toLocaleDateString('en-CA'));
   assert.equal(today.codex.total, 275); assert.equal(today.claude.total, 370);
+  assert.equal(s.hourly.length, 12); assert.deepEqual([s.hourly.at(-1).codex, s.hourly.at(-1).claude], [275, 370], 'this hour holds the session tokens');
   assert.deepEqual(s.models.map(m => [m.provider, m.model, m.tokens.total]), [['claude', 'claude-test', 370], ['codex', 'gpt-test', 275]]);
   assert.doesNotMatch(JSON.stringify(s), /SECRET/);
   assert.ok(!JSON.stringify(s).includes(home), 'paths under home are shortened to ~');
