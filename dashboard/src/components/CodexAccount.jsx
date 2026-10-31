@@ -31,7 +31,7 @@ function rowsFor(range, daily, provider, now = new Date()) {
 const SOURCES = { codex: 'Reported by Codex', claude: 'From Claude Code session logs on this Mac' };
 export function CodexAccount({ account, now, provider = 'codex' }) {
   const [range, setRange] = useState('week');
-  if (!account) return null;
+  if (!account) return provider === 'codex' ? <section className="card account"><h2><Dot provider="codex" />{TITLES.codex}</h2><div className="note">Loading account usage from Codex…</div></section> : null;
   if (account.error) {
     return (
       <section className="card account">
