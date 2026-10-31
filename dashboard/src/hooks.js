@@ -24,7 +24,7 @@ export function useSummary(intervalMs = 5000) {
         const r = await fetch('/api/summary', { cache: 'no-store' });
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
         const data = await r.json();
-        if (alive) setState({ data, error: null });
+        if (alive) setState({ data, error: null, at: Date.now() });
       } catch (e) {
         if (alive) setState(s => ({ data: s.data, error: e.message }));
       }

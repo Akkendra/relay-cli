@@ -10,6 +10,7 @@ import { DEFAULT_MODELS, loadModels, planBuild, planReview, shiftTier, diffStats
 import { findCodexSession, codexUsageTokens, claudeLimits } from './usage.mjs';
 import { readCodexAccount } from './codex-account.mjs';
 import { runStatusline } from './statusline.mjs';
+import { checkEvent, loadPolicy } from './policy.mjs';
 import { repl } from './cli.mjs';
 
 function git(cwd, args, env) {
@@ -261,7 +262,8 @@ function describeEvent(e) {
 function runCodex(root, args, prompt, deps) {
   return new Promise((done, fail) => {
     const child = spawn('codex', args, { cwd: root, env: deps.env, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
-    const result = { threadId: null, tokens: null, lastMessage: '', errors: [] }, stderr = boundedCollector();
+    const result = { threadId: null, tokens: null, lastMessage: '', errors: [], trace: [], flags: [], halted: null }, stderr = boundedCollector();
+    const policy = deps.policy ?? loadPolicy(deps.env);
     let buffer = '';
     // Ctrl-C reaches Codex directly (same terminal process group); Relay stays alive to report and offer the next step.
     const onInterrupt = () => {};
@@ -281,12 +283,22 @@ function runCodex(root, args, prompt, deps) {
         if (e.type === 'turn.failed' || e.type === 'error') result.errors.push(e.error?.message ?? e.message ?? 'Codex reported an error');
         const text = describeEvent(e);
         if (text) deps.output.write(text + '\n');
+        // The run's trace: what Codex did, in order, bounded so state stays small.
+        if (text && result.trace.length < 500) result.trace.push({ at: new Date().toISOString(), kind: e.item?.type ?? e.type, text: short(text.trim(), 300) });
+        const hit = result.halted ? null : checkEvent(e, policy);
+        if (hit?.level === 'flag') { result.flags.push(hit); deps.output.write(`  ⚠ flagged by policy: ${hit.target}\n`); }
+        if (hit?.level === 'block') {
+          result.halted = hit; result.flags.push(hit);
+          deps.output.write(`  ✋ blocked by policy: ${hit.target}. Stopping Codex.\n`);
+          child.kill('SIGTERM');
+        }
       }
     });
     child.stderr.on('data', c => stderr.add(c));
     child.once('error', e => { process.off('SIGINT', onInterrupt); fail(startError('codex', e)); });
     child.once('close', (code, signal) => {
       process.off('SIGINT', onInterrupt);
+      if (result.halted) return fail(Object.assign(failure(`Stopped by policy (${result.halted.kind === 'paths' ? 'protected path' : 'blocked command'}: ${result.halted.target}). The task is not complete; /diff shows what changed and /undo puts it back.`, 'halted_by_policy'), { result }));
       if (code === 0 && !result.errors.length) return done(result);
       const detail = result.errors.at(-1) || stderr.text().trim().split('\n').slice(-3).join(' ');
       fail(Object.assign(new Error(`codex stopped (${signal || code}); task is not complete.${detail ? ` ${short(detail, 400)}` : ''}`), { result }));
@@ -347,7 +359,11 @@ async function chooseBuild(root, task, deps) {
 }
 const addTokens = (a, b) => !a ? b : !b ? a : Object.fromEntries(Object.keys(a).map(k => [k, a[k] + (b[k] ?? 0)]));
 function recordCodex(task, run) {
-  const b = task.routing.build;
+  const b = task.routing.build, r = task.run;
+  if (r) {
+    r.trace = [...(r.trace ?? []), ...(run.trace ?? [])].slice(-500);
+    r.flags = [...(r.flags ?? []), ...(run.flags ?? [])];
+  }
   if (run.threadId) b.sessionId = run.threadId;
   task.lastCodexMessage = run.lastMessage ?? '';
   b.tokens = addTokens(b.tokens, run.tokens);
@@ -370,7 +386,7 @@ async function runBuild(root, state, deps, { mode = 'exec' } = {}) {
     task.status = 'awaiting_review';
   } catch (e) {
     if (e.result) recordCodex(task, { ...e.result, kind: 'build' });
-    task.status = 'interrupted'; throw e;
+    task.status = e.step === 'halted_by_policy' ? 'halted_by_policy' : 'interrupted'; throw e;
   } finally {
     // Interactive Codex doesn't report usage to Relay, so it's read back from Codex's own session log.
     if (mode === 'interactive') {
@@ -399,7 +415,7 @@ async function runFix(root, state, deps, request) {
     task.status = 'awaiting_review';
   } catch (e) {
     if (e.result) recordCodex(task, { ...e.result, kind: `fix:${request.kind}` });
-    task.status = 'interrupted'; throw e;
+    task.status = e.step === 'halted_by_policy' ? 'halted_by_policy' : 'interrupted'; throw e;
   } finally { save(root, state); }
 }
 const tokenLine = t => t ? `${Math.round(t.total / 100) / 10}K tokens` : 'usage unknown';
@@ -497,7 +513,9 @@ async function verify(root, state, deps, builtHash) {
 // followUp: skip the build and continue the task's Codex session with the user's text (/continue).
 export async function runAll(root, state, deps, { mode = 'exec', followUp } = {}) {
   const task = state.task;
-  task.run = { id: randomUUID(), startedAt: new Date().toISOString(), steps: [], tests: null };
+  const policy = loadPolicy(deps.env);
+  deps = { ...deps, policy };
+  task.run = { id: randomUUID(), startedAt: new Date().toISOString(), steps: [], tests: null, trace: [], flags: [], policyHash: policy.hash };
   checkpoint(root, state, 'started');
   try {
     if (followUp) await stage('fix', () => runFix(root, state, deps, { kind: 'user', text: followUp }));

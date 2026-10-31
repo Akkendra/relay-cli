@@ -77,6 +77,8 @@ if (args[0] === 'exec') {
   const out = e => process.stdout.write(JSON.stringify(e) + '\\n');
   out({ type: 'thread.started', thread_id: args[1] === 'resume' ? args.at(-2) : 'thread-fake' });
   out({ type: 'item.started', item: { type: 'command_execution', command: 'npm test' } });
+  if (process.env.FAKE_CODEX_TOUCH) out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: process.env.FAKE_CODEX_TOUCH, kind: 'update' }] } });
+  if (process.env.FAKE_CODEX_CMD) { out({ type: 'item.started', item: { type: 'command_execution', command: process.env.FAKE_CODEX_CMD } }); fs.writeFileSync(log('codex-waiting'), '1'); require('child_process').execSync('sleep 5'); fs.writeFileSync(log('codex-finished'), '1'); }
   if (process.env.FAKE_CODEX_SECRET) fs.writeFileSync('config.js', 'export const key = ' + JSON.stringify(process.env.FAKE_CODEX_SECRET) + ';\\n');
   if (!process.env.FAKE_CODEX_NOOP) fs.writeFileSync(file, 'export const feature = ' + n + ';\\n');
   out({ type: 'item.completed', item: { type: 'file_change', changes: [{ path: file, kind: 'add' }] } });
@@ -419,3 +421,27 @@ for (const word of ['exit', 'quit', 'Exit', 'bye']) {
     assert.ok(!h.logged('codex.json')); assert.equal(h.saved().history ?? undefined, undefined);
   });
 }
+test('a blocked command stops Codex at once and the task is halted, with the trace kept', async t => {
+  const h = runHarness(t, { env: { FAKE_CODEX_CMD: 'git push origin main' } });
+  const started = Date.now();
+  await assert.rejects(h.run(), /Stopped by policy \(blocked command: git push origin main\)/);
+  assert.ok(Date.now() - started < 4500, 'Codex was stopped instead of running to the end');
+  assert.ok(!h.logged('codex-finished')); assert.ok(!h.logged('npm.json'), 'no tests after a halt'); assert.ok(!h.logged('claude.json'), 'no review after a halt');
+  const task = h.state();
+  assert.equal(task.status, 'halted_by_policy'); assert.equal(task.run.steps.at(-1).step, 'halted_by_policy');
+  assert.deepEqual(task.run.flags.map(f => [f.level, f.target]), [['block', 'git push origin main']]);
+  assert.ok(task.run.trace.some(e => /git push origin main/.test(e.text))); assert.match(task.run.policyHash, /^[0-9a-f]{12}$/);
+});
+test('flagged actions are recorded without stopping the run, and show in the runs feed', async t => {
+  const h = runHarness(t, { env: { FAKE_CODEX_TOUCH: 'package.json' } });
+  await h.run();
+  const task = h.state();
+  assert.equal(task.status, 'needs_human_decision');
+  assert.deepEqual(task.run.flags.map(f => [f.level, f.kind, f.target]), [['flag', 'paths', 'package.json']]);
+  assert.ok(task.run.trace.some(e => e.kind === 'file_change') && task.run.trace.some(e => e.kind === 'agent_message'));
+  const { summarize } = await import('../src/usage.mjs');
+  const fakeSession = join(h.home, '.codex', 'sessions'); mkdirSync(fakeSession, { recursive: true });
+  writeFileSync(join(fakeSession, 'r.jsonl'), JSON.stringify({ timestamp: new Date().toISOString(), type: 'session_meta', payload: { id: 's1', cwd: h.root, timestamp: new Date().toISOString() } }) + '\n');
+  const [run] = summarize({ home: h.home }).runs;
+  assert.equal(run.status, 'needs_human_decision'); assert.equal(run.flags.length, 1); assert.ok(run.trace.length > 0); assert.ok(run.build.model);
+});

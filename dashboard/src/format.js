@@ -63,6 +63,7 @@ const STATUS = {
   interrupted: ['warning', 'Build interrupted'],
   changed_during_run: ['warning', 'Changed during run'],
   review_stale: ['warning', 'Review is stale'],
+  halted_by_policy: ['critical', 'Halted by policy'], review_blocked: ['critical', 'Review blocked'], no_changes: ['idle', 'No changes'], fixing: ['idle', 'Fixing'], done: ['good', 'Done'],
   building: ['idle', 'Building'], testing: ['idle', 'Testing'], reviewing: ['idle', 'Reviewing'],
   awaiting_review: ['idle', 'Awaiting review'], ready: ['idle', 'Ready'], no_task: ['idle', 'No task'],
 };

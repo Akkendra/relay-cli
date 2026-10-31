@@ -8,8 +8,9 @@ import { Sessions } from './components/Sessions.jsx';
 import { RelayTasks } from './components/RelayTasks.jsx';
 import { CodexAccount } from './components/CodexAccount.jsx';
 import { Setup } from './components/Setup.jsx';
+import { Runs } from './components/Runs.jsx';
 import { Clock, Core } from './components/Hud.jsx';
-import { METRICS, ago, metricName, metricValue } from './format.js';
+import { METRICS, metricName, metricValue } from './format.js';
 import { usePersisted, useSummary } from './hooks.js';
 
 const SERIES = ['codex', 'claude'];
@@ -25,7 +26,9 @@ function Footer({ sources }) {
 }
 
 export function App() {
-  const { data, error } = useSummary();
+  const { data, error, at } = useSummary();
+  // Offline when a refresh fails or the last good one is over 30 seconds old.
+  const offline = Boolean(error) || (at && Date.now() - at > 30000);
   const [metric, setMetric] = usePersisted('metric', 'all');
   const [range, setRange] = usePersisted('range', '7');
   const [provider, setProvider] = usePersisted('provider', 'all');
@@ -46,9 +49,9 @@ export function App() {
     <main>
       <header className="topbar">
         <a className="brand" href="/">RELAY</a>
-        <nav className="sections" aria-label="Sections"><a href="#overview">Overview</a><a href="#usage">Usage</a><a href="#sessions">Sessions</a><a href="#setup">Setup</a></nav>
+        <nav className="sections" aria-label="Sections"><a href="#overview">Overview</a><a href="#usage">Usage</a><a href="#sessions">Sessions</a><a href="#runs">Runs</a><a href="#setup">Setup</a></nav>
         <div className="tools">
-          <span className={`pill ${error ? 'off' : 'on'}`}>{error ? 'Offline' : data ? `Live · updated ${ago(data.generatedAt)}` : 'Connecting'}</span>
+          <span className={`live ${offline ? 'off' : data ? 'on' : ''}`} title={data ? `Last update ${new Date(data.generatedAt).toLocaleTimeString()}${error ? ` · ${error}` : ''}` : 'Connecting'}>{offline ? 'Offline' : data ? 'Live' : 'Connecting'}</span>
           <Clock />
           <button type="button" className="icon" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(NEXT_THEME[theme])}>{theme === 'dark' ? '☀' : '☾'}</button>
         </div>
@@ -77,6 +80,7 @@ export function App() {
             <ModelBars models={data.models} metric={metric} />
           </section>
           <Sessions sessions={data.sessions} provider={provider} onProvider={setProvider} now={now} />
+          <Runs runs={data.runs} now={now} />
           <RelayTasks relay={data.relay} />
           <Setup catalog={data.catalog} />
           <Footer sources={data.sources} />

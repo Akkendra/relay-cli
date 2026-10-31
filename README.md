@@ -83,6 +83,19 @@ Relay sizes each task so small work goes to cheaper models and complex work to b
 
 Codex sends its own instructions with every call (about 15K mostly cached input tokens, even for a one-word reply). That fixed cost limits how much a small model can save on tiny tasks.
 
+## Policy, tracing, and halts
+
+While Codex runs, Relay records each command, file edit, and message in the run's trace, and checks it against a policy:
+
+- **Flag** (recorded, the run continues): `git push`, `curl`, `wget`, `rm -rf`, `npm publish`, `sudo`, and edits to `.env*`, `.github/workflows/`, or `package.json`.
+- **Block** (Relay stops Codex at once, and the task becomes `halted_by_policy`): `git push`, `npm publish`, `sudo`, `rm -rf /` or `~`, and edits to `.env*`.
+
+Add your own patterns in `~/.config/relay/policy.json`, for example `{"block": {"paths": ["^migrations/"]}, "flag": {"commands": ["\\bdocker\\b"]}}`. Patterns are case-insensitive regular expressions and are checked when loaded. Each run records a short hash of the policy that governed it.
+
+Relay sees actions as Codex reports them, so a blocked command may already have started; Codex's sandbox remains the hard boundary. After a halt, `/diff` shows what changed and `/undo` puts it back.
+
+The dashboard's **Runs** feed lists every Relay run across projects: outcome, models, tokens, duration, flags, and a Build → Test → Review → Decision bar. A row opens its steps, trace, and evidence (tests and review findings).
+
 ## Usage dashboard
 
 ```bash
