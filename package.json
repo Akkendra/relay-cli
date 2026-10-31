@@ -1,0 +1,25 @@
+{
+  "name": "relay-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "relay": "./bin/relay.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node bin/relay.mjs",
+    "build:dashboard": "vite build --config dashboard/vite.config.js",
+    "dev:dashboard": "vite --config dashboard/vite.config.js"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.1.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "vite": "8.3.4"
+  },
+  "license": "MIT"
+}
